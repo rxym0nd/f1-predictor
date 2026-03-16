@@ -1,0 +1,13 @@
+[theme]
+base = "dark"
+backgroundColor = "#080808"
+secondaryBackgroundColor = "#0f0f0f"
+textColor = "#e8e8e8"
+font = "sans serif"
+
+[server]
+# Increase limit for the processed parquet files
+maxUploadSize = 200
+
+[browser]
+gatherUsageStats = false

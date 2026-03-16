@@ -1,0 +1,168 @@
+{
+  "year": 2024,
+  "round": 4,
+  "event": "Japanese Grand Prix",
+  "circuit": "Suzuka",
+  "predictions": [
+    {
+      "Driver": "VER",
+      "TeamName": "Red Bull Racing",
+      "PredictedQualiPos": 1,
+      "PredictedRaceRank": 1,
+      "PodiumProbability": 0.9937345385551453,
+      "PodiumProbability_norm": 0.6255395412445068
+    },
+    {
+      "Driver": "SAI",
+      "TeamName": "Ferrari",
+      "PredictedQualiPos": 4,
+      "PredictedRaceRank": 2,
+      "PodiumProbability": 0.9360263347625732,
+      "PodiumProbability_norm": 0.5892131924629211
+    },
+    {
+      "Driver": "LEC",
+      "TeamName": "Ferrari",
+      "PredictedQualiPos": 2,
+      "PredictedRaceRank": 3,
+      "PodiumProbability": 0.9138075709342957,
+      "PodiumProbability_norm": 0.5752268433570862
+    },
+    {
+      "Driver": "PER",
+      "TeamName": "Red Bull Racing",
+      "PredictedQualiPos": 3,
+      "PredictedRaceRank": 4,
+      "PodiumProbability": 0.8420820236206055,
+      "PodiumProbability_norm": 0.530076801776886
+    },
+    {
+      "Driver": "NOR",
+      "TeamName": "McLaren",
+      "PredictedQualiPos": 5,
+      "PredictedRaceRank": 5,
+      "PodiumProbability": 0.5732043981552124,
+      "PodiumProbability_norm": 0.36082276701927185
+    },
+    {
+      "Driver": "RUS",
+      "TeamName": "Mercedes",
+      "PredictedQualiPos": 7,
+      "PredictedRaceRank": 6,
+      "PodiumProbability": 0.1331469863653183,
+      "PodiumProbability_norm": 0.08381383866071701
+    },
+    {
+      "Driver": "HAM",
+      "TeamName": "Mercedes",
+      "PredictedQualiPos": 9,
+      "PredictedRaceRank": 7,
+      "PodiumProbability": 0.09948345273733139,
+      "PodiumProbability_norm": 0.06262320280075073
+    },
+    {
+      "Driver": "PIA",
+      "TeamName": "McLaren",
+      "PredictedQualiPos": 6,
+      "PredictedRaceRank": 8,
+      "PodiumProbability": 0.09288200736045837,
+      "PodiumProbability_norm": 0.058467697352170944
+    },
+    {
+      "Driver": "ALO",
+      "TeamName": "Aston Martin",
+      "PredictedQualiPos": 8,
+      "PredictedRaceRank": 9,
+      "PodiumProbability": 0.04845532402396202,
+      "PodiumProbability_norm": 0.030501829460263252
+    },
+    {
+      "Driver": "RIC",
+      "TeamName": "RB",
+      "PredictedQualiPos": 11,
+      "PredictedRaceRank": 10,
+      "PodiumProbability": 0.03125676512718201,
+      "PodiumProbability_norm": 0.019675619900226593
+    },
+    {
+      "Driver": "STR",
+      "TeamName": "Aston Martin",
+      "PredictedQualiPos": 15,
+      "PredictedRaceRank": 11,
+      "PodiumProbability": 0.026265433058142662,
+      "PodiumProbability_norm": 0.016533657908439636
+    },
+    {
+      "Driver": "GAS",
+      "TeamName": "Alpine",
+      "PredictedQualiPos": 10,
+      "PredictedRaceRank": 12,
+      "PodiumProbability": 0.01937471702694893,
+      "PodiumProbability_norm": 0.012196065858006477
+    },
+    {
+      "Driver": "HUL",
+      "TeamName": "Haas F1 Team",
+      "PredictedQualiPos": 14,
+      "PredictedRaceRank": 13,
+      "PodiumProbability": 0.013072802685201168,
+      "PodiumProbability_norm": 0.00822911411523819
+    },
+    {
+      "Driver": "BOT",
+      "TeamName": "Kick Sauber",
+      "PredictedQualiPos": 12,
+      "PredictedRaceRank": 14,
+      "PodiumProbability": 0.011283407919108868,
+      "PodiumProbability_norm": 0.007102719973772764
+    },
+    {
+      "Driver": "ALB",
+      "TeamName": "Williams",
+      "PredictedQualiPos": 18,
+      "PredictedRaceRank": 15,
+      "PodiumProbability": 0.00992264598608017,
+      "PodiumProbability_norm": 0.0062461425550282
+    },
+    {
+      "Driver": "TSU",
+      "TeamName": "RB",
+      "PredictedQualiPos": 13,
+      "PredictedRaceRank": 16,
+      "PodiumProbability": 0.009409686550498009,
+      "PodiumProbability_norm": 0.00592324323952198
+    },
+    {
+      "Driver": "OCO",
+      "TeamName": "Alpine",
+      "PredictedQualiPos": 16,
+      "PredictedRaceRank": 17,
+      "PodiumProbability": 0.008300782181322575,
+      "PodiumProbability_norm": 0.005225206259638071
+    },
+    {
+      "Driver": "MAG",
+      "TeamName": "Haas F1 Team",
+      "PredictedQualiPos": 17,
+      "PredictedRaceRank": 18,
+      "PodiumProbability": 0.002869916381314397,
+      "PodiumProbability_norm": 0.0018065652111545205
+    },
+    {
+      "Driver": "SAR",
+      "TeamName": "Williams",
+      "PredictedQualiPos": 19,
+      "PredictedRaceRank": 19,
+      "PodiumProbability": 0.000646748289000243,
+      "PodiumProbability_norm": 0.00040711741894483566
+    },
+    {
+      "Driver": "ZHO",
+      "TeamName": "Kick Sauber",
+      "PredictedQualiPos": 20,
+      "PredictedRaceRank": 20,
+      "PodiumProbability": 0.0005866608116775751,
+      "PodiumProbability_norm": 0.00036929332418367267
+    }
+  ]
+}

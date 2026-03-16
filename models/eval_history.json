@@ -1,0 +1,869 @@
+[
+  {
+    "key": "2024_R01",
+    "year": 2024,
+    "round": 1,
+    "event": "Bahrain Grand Prix",
+    "circuit": "Sakhir",
+    "quali": {
+      "MAE_positions": 2.4,
+      "Spearman_rho": 0.8647
+    },
+    "race": {
+      "Brier_score": 0.0851,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R02",
+    "year": 2024,
+    "round": 2,
+    "event": "Saudi Arabian Grand Prix",
+    "circuit": "Jeddah",
+    "quali": {
+      "MAE_positions": 1.7,
+      "Spearman_rho": 0.9008
+    },
+    "race": {
+      "Brier_score": 0.0336,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R03",
+    "year": 2024,
+    "round": 3,
+    "event": "Australian Grand Prix",
+    "circuit": "Melbourne",
+    "quali": {
+      "MAE_positions": 1.7895,
+      "Spearman_rho": 0.9035
+    },
+    "race": {
+      "Brier_score": 0.0757,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R04",
+    "year": 2024,
+    "round": 4,
+    "event": "Japanese Grand Prix",
+    "circuit": "Suzuka",
+    "quali": {
+      "MAE_positions": 1.8,
+      "Spearman_rho": 0.8947
+    },
+    "race": {
+      "Brier_score": 0.0631,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 12% of session time"
+  },
+  {
+    "key": "2024_R05",
+    "year": 2024,
+    "round": 5,
+    "event": "Chinese Grand Prix",
+    "circuit": "Shanghai",
+    "quali": {
+      "MAE_positions": 1.9,
+      "Spearman_rho": 0.9128
+    },
+    "race": {
+      "Brier_score": 0.074,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 19% of session time"
+  },
+  {
+    "key": "2024_R06",
+    "year": 2024,
+    "round": 6,
+    "event": "Miami Grand Prix",
+    "circuit": "Miami",
+    "quali": {
+      "MAE_positions": 1.8,
+      "Spearman_rho": 0.9143
+    },
+    "race": {
+      "Brier_score": 0.0566,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R07",
+    "year": 2024,
+    "round": 7,
+    "event": "Emilia Romagna Grand Prix",
+    "circuit": "Imola",
+    "quali": {
+      "MAE_positions": 2.6,
+      "Spearman_rho": 0.8226
+    },
+    "race": {
+      "Brier_score": 0.0751,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R08",
+    "year": 2024,
+    "round": 8,
+    "event": "Monaco Grand Prix",
+    "circuit": "Monaco",
+    "quali": {
+      "MAE_positions": 2.7,
+      "Spearman_rho": 0.7744
+    },
+    "race": {
+      "Brier_score": 0.0857,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 20% of session time"
+  },
+  {
+    "key": "2024_R09",
+    "year": 2024,
+    "round": 9,
+    "event": "Canadian Grand Prix",
+    "circuit": "Montr\u00e9al",
+    "quali": {
+      "MAE_positions": 3.7,
+      "Spearman_rho": 0.7203
+    },
+    "race": {
+      "Brier_score": 0.1673,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 17% of session time"
+  },
+  {
+    "key": "2024_R10",
+    "year": 2024,
+    "round": 10,
+    "event": "Spanish Grand Prix",
+    "circuit": "Barcelona",
+    "quali": {
+      "MAE_positions": 1.9,
+      "Spearman_rho": 0.9218
+    },
+    "race": {
+      "Brier_score": 0.0779,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R11",
+    "year": 2024,
+    "round": 11,
+    "event": "Austrian Grand Prix",
+    "circuit": "Spielberg",
+    "quali": {
+      "MAE_positions": 2.0,
+      "Spearman_rho": 0.9053
+    },
+    "race": {
+      "Brier_score": 0.1962,
+      "Top3_overlap": 0
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R12",
+    "year": 2024,
+    "round": 12,
+    "event": "British Grand Prix",
+    "circuit": "Silverstone",
+    "quali": {
+      "MAE_positions": 3.5,
+      "Spearman_rho": 0.7038
+    },
+    "race": {
+      "Brier_score": 0.0793,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R13",
+    "year": 2024,
+    "round": 13,
+    "event": "Hungarian Grand Prix",
+    "circuit": "Budapest",
+    "quali": {
+      "MAE_positions": 3.4,
+      "Spearman_rho": 0.7188
+    },
+    "race": {
+      "Brier_score": 0.0432,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R14",
+    "year": 2024,
+    "round": 14,
+    "event": "Belgian Grand Prix",
+    "circuit": "Spa-Francorchamps",
+    "quali": {
+      "MAE_positions": 1.4,
+      "Spearman_rho": 0.9278
+    },
+    "race": {
+      "Brier_score": 0.094,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R15",
+    "year": 2024,
+    "round": 15,
+    "event": "Dutch Grand Prix",
+    "circuit": "Zandvoort",
+    "quali": {
+      "MAE_positions": 2.4737,
+      "Spearman_rho": 0.8561
+    },
+    "race": {
+      "Brier_score": 0.0505,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R16",
+    "year": 2024,
+    "round": 16,
+    "event": "Italian Grand Prix",
+    "circuit": "Monza",
+    "quali": {
+      "MAE_positions": 2.0,
+      "Spearman_rho": 0.9113
+    },
+    "race": {
+      "Brier_score": 0.0684,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R17",
+    "year": 2024,
+    "round": 17,
+    "event": "Azerbaijan Grand Prix",
+    "circuit": "Baku",
+    "quali": {
+      "MAE_positions": 2.6,
+      "Spearman_rho": 0.812
+    },
+    "race": {
+      "Brier_score": 0.1152,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R18",
+    "year": 2024,
+    "round": 18,
+    "event": "Singapore Grand Prix",
+    "circuit": "Marina Bay",
+    "quali": {
+      "MAE_positions": 1.9,
+      "Spearman_rho": 0.8932
+    },
+    "race": {
+      "Brier_score": 0.0709,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R19",
+    "year": 2024,
+    "round": 19,
+    "event": "United States Grand Prix",
+    "circuit": "Austin",
+    "quali": {
+      "MAE_positions": 2.5,
+      "Spearman_rho": 0.7744
+    },
+    "race": {
+      "Brier_score": 0.0938,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R20",
+    "year": 2024,
+    "round": 20,
+    "event": "Mexico City Grand Prix",
+    "circuit": "Mexico City",
+    "quali": {
+      "MAE_positions": 2.8,
+      "Spearman_rho": 0.7398
+    },
+    "race": {
+      "Brier_score": 0.0445,
+      "Top3_overlap": 3
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 17% of session time"
+  },
+  {
+    "key": "2024_R21",
+    "year": 2024,
+    "round": 21,
+    "event": "S\u00e3o Paulo Grand Prix",
+    "circuit": "S\u00e3o Paulo",
+    "quali": {
+      "MAE_positions": 4.5,
+      "Spearman_rho": 0.5158
+    },
+    "race": {
+      "Brier_score": 0.1992,
+      "Top3_overlap": 1
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 21% of session time; Spearman \u03c1=0.516 below chaos threshold"
+  },
+  {
+    "key": "2024_R22",
+    "year": 2024,
+    "round": 22,
+    "event": "Las Vegas Grand Prix",
+    "circuit": "Las Vegas",
+    "quali": {
+      "MAE_positions": 2.7,
+      "Spearman_rho": 0.8406
+    },
+    "race": {
+      "Brier_score": 0.0787,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2024_R23",
+    "year": 2024,
+    "round": 23,
+    "event": "Qatar Grand Prix",
+    "circuit": "Lusail",
+    "quali": {
+      "MAE_positions": 2.2,
+      "Spearman_rho": 0.8406
+    },
+    "race": {
+      "Brier_score": 0.1304,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 20% of session time"
+  },
+  {
+    "key": "2024_R24",
+    "year": 2024,
+    "round": 24,
+    "event": "Abu Dhabi Grand Prix",
+    "circuit": "Yas Island",
+    "quali": {
+      "MAE_positions": 2.1,
+      "Spearman_rho": 0.8917
+    },
+    "race": {
+      "Brier_score": 0.0204,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R01",
+    "year": 2025,
+    "round": 1,
+    "event": "Australian Grand Prix",
+    "circuit": "Melbourne",
+    "quali": {
+      "MAE_positions": 4.3684,
+      "Spearman_rho": 0.5018
+    },
+    "race": {
+      "Brier_score": 0.0777,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 26% of session time; Spearman \u03c1=0.502 below chaos threshold"
+  },
+  {
+    "key": "2025_R02",
+    "year": 2025,
+    "round": 2,
+    "event": "Chinese Grand Prix",
+    "circuit": "Shanghai",
+    "quali": {
+      "MAE_positions": 3.2,
+      "Spearman_rho": 0.7263
+    },
+    "race": {
+      "Brier_score": 0.0847,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R03",
+    "year": 2025,
+    "round": 3,
+    "event": "Japanese Grand Prix",
+    "circuit": "Suzuka",
+    "quali": {
+      "MAE_positions": 2.2,
+      "Spearman_rho": 0.8617
+    },
+    "race": {
+      "Brier_score": 0.0486,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R04",
+    "year": 2025,
+    "round": 4,
+    "event": "Bahrain Grand Prix",
+    "circuit": "Sakhir",
+    "quali": {
+      "MAE_positions": 3.6,
+      "Spearman_rho": 0.6962
+    },
+    "race": {
+      "Brier_score": 0.0758,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R05",
+    "year": 2025,
+    "round": 5,
+    "event": "Saudi Arabian Grand Prix",
+    "circuit": "Jeddah",
+    "quali": {
+      "MAE_positions": 2.1,
+      "Spearman_rho": 0.9038
+    },
+    "race": {
+      "Brier_score": 0.0662,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R06",
+    "year": 2025,
+    "round": 6,
+    "event": "Miami Grand Prix",
+    "circuit": "Miami Gardens",
+    "quali": {
+      "MAE_positions": 2.85,
+      "Spearman_rho": 0.8123
+    },
+    "race": {
+      "Brier_score": 0.0681,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R07",
+    "year": 2025,
+    "round": 7,
+    "event": "Emilia Romagna Grand Prix",
+    "circuit": "Imola",
+    "quali": {
+      "MAE_positions": 4.1053,
+      "Spearman_rho": 0.6281
+    },
+    "race": {
+      "Brier_score": 0.0604,
+      "Top3_overlap": 3
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 14% of session time"
+  },
+  {
+    "key": "2025_R08",
+    "year": 2025,
+    "round": 8,
+    "event": "Monaco Grand Prix",
+    "circuit": "Monaco",
+    "quali": {
+      "MAE_positions": 3.9,
+      "Spearman_rho": 0.6992
+    },
+    "race": {
+      "Brier_score": 0.0903,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R09",
+    "year": 2025,
+    "round": 9,
+    "event": "Spanish Grand Prix",
+    "circuit": "Barcelona",
+    "quali": {
+      "MAE_positions": 3.4211,
+      "Spearman_rho": 0.7126
+    },
+    "race": {
+      "Brier_score": 0.0682,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R10",
+    "year": 2025,
+    "round": 10,
+    "event": "Canadian Grand Prix",
+    "circuit": "Montr\u00e9al",
+    "quali": {
+      "MAE_positions": 3.6,
+      "Spearman_rho": 0.6917
+    },
+    "race": {
+      "Brier_score": 0.1443,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R11",
+    "year": 2025,
+    "round": 11,
+    "event": "Austrian Grand Prix",
+    "circuit": "Spielberg",
+    "quali": {
+      "MAE_positions": 3.95,
+      "Spearman_rho": 0.6521
+    },
+    "race": {
+      "Brier_score": 0.0809,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R12",
+    "year": 2025,
+    "round": 12,
+    "event": "British Grand Prix",
+    "circuit": "Silverstone",
+    "quali": {
+      "MAE_positions": 2.3,
+      "Spearman_rho": 0.8406
+    },
+    "race": {
+      "Brier_score": 0.1398,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 19% of session time"
+  },
+  {
+    "key": "2025_R13",
+    "year": 2025,
+    "round": 13,
+    "event": "Belgian Grand Prix",
+    "circuit": "Spa-Francorchamps",
+    "quali": {
+      "MAE_positions": 3.7,
+      "Spearman_rho": 0.5985
+    },
+    "race": {
+      "Brier_score": 0.0529,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 43% of session time"
+  },
+  {
+    "key": "2025_R14",
+    "year": 2025,
+    "round": 14,
+    "event": "Hungarian Grand Prix",
+    "circuit": "Budapest",
+    "quali": {
+      "MAE_positions": 4.3,
+      "Spearman_rho": 0.5248
+    },
+    "race": {
+      "Brier_score": 0.0766,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "Spearman \u03c1=0.525 below chaos threshold"
+  },
+  {
+    "key": "2025_R15",
+    "year": 2025,
+    "round": 15,
+    "event": "Dutch Grand Prix",
+    "circuit": "Zandvoort",
+    "quali": {
+      "MAE_positions": 2.6842,
+      "Spearman_rho": 0.7723
+    },
+    "race": {
+      "Brier_score": 0.1893,
+      "Top3_overlap": 1
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 14% of session time"
+  },
+  {
+    "key": "2025_R16",
+    "year": 2025,
+    "round": 16,
+    "event": "Italian Grand Prix",
+    "circuit": "Monza",
+    "quali": {
+      "MAE_positions": 3.6,
+      "Spearman_rho": 0.6962
+    },
+    "race": {
+      "Brier_score": 0.098,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R17",
+    "year": 2025,
+    "round": 17,
+    "event": "Azerbaijan Grand Prix",
+    "circuit": "Baku",
+    "quali": {
+      "MAE_positions": 2.5,
+      "Spearman_rho": 0.8316
+    },
+    "race": {
+      "Brier_score": 0.1645,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R18",
+    "year": 2025,
+    "round": 18,
+    "event": "Singapore Grand Prix",
+    "circuit": "Marina Bay",
+    "quali": {
+      "MAE_positions": 1.9,
+      "Spearman_rho": 0.9143
+    },
+    "race": {
+      "Brier_score": 0.054,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R19",
+    "year": 2025,
+    "round": 19,
+    "event": "United States Grand Prix",
+    "circuit": "Austin",
+    "quali": {
+      "MAE_positions": 1.9474,
+      "Spearman_rho": 0.9175
+    },
+    "race": {
+      "Brier_score": 0.0678,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R20",
+    "year": 2025,
+    "round": 20,
+    "event": "Mexico City Grand Prix",
+    "circuit": "Mexico City",
+    "quali": {
+      "MAE_positions": 2.2,
+      "Spearman_rho": 0.8662
+    },
+    "race": {
+      "Brier_score": 0.0812,
+      "Top3_overlap": 2
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2025_R21",
+    "year": 2025,
+    "round": 21,
+    "event": "S\u00e3o Paulo Grand Prix",
+    "circuit": "S\u00e3o Paulo",
+    "quali": {
+      "MAE_positions": 4.8421,
+      "Spearman_rho": 0.3333
+    },
+    "race": {
+      "Brier_score": 0.1178,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 14% of session time; Spearman \u03c1=0.333 below chaos threshold"
+  },
+  {
+    "key": "2025_R22",
+    "year": 2025,
+    "round": 22,
+    "event": "Las Vegas Grand Prix",
+    "circuit": "Las Vegas",
+    "quali": {
+      "MAE_positions": 5.2,
+      "Spearman_rho": 0.3534
+    },
+    "race": {
+      "Brier_score": 0.0718,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "Spearman \u03c1=0.353 below chaos threshold"
+  },
+  {
+    "key": "2025_R23",
+    "year": 2025,
+    "round": 23,
+    "event": "Qatar Grand Prix",
+    "circuit": "Lusail",
+    "quali": {
+      "MAE_positions": 3.2,
+      "Spearman_rho": 0.7519
+    },
+    "race": {
+      "Brier_score": 0.162,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 10% of session time"
+  },
+  {
+    "key": "2025_R24",
+    "year": 2025,
+    "round": 24,
+    "event": "Abu Dhabi Grand Prix",
+    "circuit": "Yas Island",
+    "quali": {
+      "MAE_positions": 3.5,
+      "Spearman_rho": 0.6932
+    },
+    "race": {
+      "Brier_score": 0.057,
+      "Top3_overlap": 3
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2026_R01",
+    "year": 2026,
+    "round": 1,
+    "event": "Australian Grand Prix",
+    "circuit": "Melbourne",
+    "quali": {
+      "MAE_positions": 6.0,
+      "Spearman_rho": 0.2241
+    },
+    "race": {
+      "Brier_score": 0.0892,
+      "Top3_overlap": 2
+    },
+    "chaos": true,
+    "chaos_reason": "Spearman \u03c1=0.224 below chaos threshold"
+  },
+  {
+    "key": "2026_R02",
+    "year": 2026,
+    "round": 2,
+    "event": "Chinese Grand Prix",
+    "circuit": "Shanghai",
+    "quali": {
+      "MAE_positions": 4.7273,
+      "Spearman_rho": 0.5844
+    },
+    "race": {
+      "Brier_score": 0.1045,
+      "Top3_overlap": 1
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  },
+  {
+    "key": "2026_R03",
+    "year": 2026,
+    "round": 3,
+    "event": "Chinese Grand Prix",
+    "circuit": "Shanghai",
+    "quali": {
+      "MAE_positions": null,
+      "Spearman_rho": null
+    },
+    "race": {
+      "Brier_score": null,
+      "Top3_overlap": null
+    },
+    "chaos": false,
+    "chaos_reason": ""
+  }
+]
