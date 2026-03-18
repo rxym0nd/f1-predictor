@@ -360,7 +360,7 @@ if "Pre-Race" in page:
 
         if _IS_CLOUD:
             st.markdown(
-                "<div class='cloud-notice'>☁️ Predictions updated after each race weekend.</div>",
+                "<div class='cloud-notice'>☁️ Predictions updated on saturday after FP2.</div>",
                 unsafe_allow_html=True,
     )
         else:
