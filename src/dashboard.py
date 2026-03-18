@@ -360,13 +360,9 @@ if "Pre-Race" in page:
 
         if _IS_CLOUD:
             st.markdown(
-                "<div class='cloud-notice'>Run <code>python src/predict.py "
-                "--year {year} --round {round_number}</code> locally "
-                "then push to GitHub.</div>".format(
-                    year=year, round_number=round_number
-                ),
+                "<div class='cloud-notice'>☁️ Predictions updated after each race weekend.</div>",
                 unsafe_allow_html=True,
-            )
+    )
         else:
             run_btn = st.button("Generate Prediction")
 
