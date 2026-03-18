@@ -1206,16 +1206,7 @@ def build_race_features(quali_df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _load_fp_laps(session_type: str) -> pd.DataFrame:
-    files = sorted(RAW_DIR.glob(f"*_{session_type}_laps.parquet"))
-    if not files:
-        return pd.DataFrame()
-    df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    df = _normalise_driver_col(df)
-    df["LapTime_s"] = pd.to_timedelta(df["LapTime"]).dt.total_seconds()
-    df = df.dropna(subset=["LapTime_s"])
-    log.info("Loaded %d %s laps from %d files", len(df), session_type, len(files))
-    return df
+
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

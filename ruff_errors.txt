@@ -1,0 +1,165 @@
+E702 Multiple statements on one line (semicolon)
+   --> src\batch_evaluate.py:113:14
+    |
+111 |     log.info("-" * 72)
+112 |
+113 |     maes = []; rhos = []; briers = []; overlaps = []
+    |              ^
+114 |
+115 |     for r in results:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> src\batch_evaluate.py:113:25
+    |
+111 |     log.info("-" * 72)
+112 |
+113 |     maes = []; rhos = []; briers = []; overlaps = []
+    |                         ^
+114 |
+115 |     for r in results:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> src\batch_evaluate.py:113:38
+    |
+111 |     log.info("-" * 72)
+112 |
+113 |     maes = []; rhos = []; briers = []; overlaps = []
+    |                                      ^
+114 |
+115 |     for r in results:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> src\batch_evaluate.py:118:37
+    |
+116 |         q  = r.get("quali", {})
+117 |         rc = r.get("race",  {})
+118 |         mae = q.get("MAE_positions"); rho = q.get("Spearman_rho")
+    |                                     ^
+119 |         brier = rc.get("Brier_score"); top3 = rc.get("Top3_overlap")
+120 |         flag = " ✗" if r.get("status", "ok") != "ok" else ""
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> src\batch_evaluate.py:119:38
+    |
+117 |         rc = r.get("race",  {})
+118 |         mae = q.get("MAE_positions"); rho = q.get("Spearman_rho")
+119 |         brier = rc.get("Brier_score"); top3 = rc.get("Top3_overlap")
+    |                                      ^
+120 |         flag = " ✗" if r.get("status", "ok") != "ok" else ""
+121 |         log.info(
+    |
+
+E701 Multiple statements on one line (colon)
+   --> src\batch_evaluate.py:130:29
+    |
+128 |             flag,
+129 |         )
+130 |         if mae   is not None: maes.append(mae)
+    |                             ^
+131 |         if rho   is not None: rhos.append(rho)
+132 |         if brier is not None: briers.append(brier)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> src\batch_evaluate.py:131:29
+    |
+129 |         )
+130 |         if mae   is not None: maes.append(mae)
+131 |         if rho   is not None: rhos.append(rho)
+    |                             ^
+132 |         if brier is not None: briers.append(brier)
+133 |         if top3  is not None: overlaps.append(top3)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> src\batch_evaluate.py:132:29
+    |
+130 |         if mae   is not None: maes.append(mae)
+131 |         if rho   is not None: rhos.append(rho)
+132 |         if brier is not None: briers.append(brier)
+    |                             ^
+133 |         if top3  is not None: overlaps.append(top3)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> src\batch_evaluate.py:133:29
+    |
+131 |         if rho   is not None: rhos.append(rho)
+132 |         if brier is not None: briers.append(brier)
+133 |         if top3  is not None: overlaps.append(top3)
+    |                             ^
+134 |
+135 |     log.info("-" * 72)
+    |
+
+F401 [*] `config.COMPOUND_ORDER` imported but unused
+  --> src\predict.py:32:5
+   |
+30 | from config import (
+31 |     CHAOS_CIRCUITS,
+32 |     COMPOUND_ORDER,
+   |     ^^^^^^^^^^^^^^
+33 |     QUALI_FEATURES,
+34 |     RACE_FEATURES,
+   |
+help: Remove unused import: `config.COMPOUND_ORDER`
+
+E402 Module level import not at top of file
+  --> src\predict.py:85:1
+   |
+85 | import logging as _logging
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+
+F841 Local variable `X_train` is assigned to but never used
+   --> src\train.py:231:5
+    |
+229 |     test  = apply_impute_stats(test,  impute_stats, QUALI_FEATURES)
+230 |
+231 |     X_train = train[QUALI_FEATURES]
+    |     ^^^^^^^
+232 |     y_train = train[QUALI_TARGET].values
+233 |     X_test  = test[QUALI_FEATURES]
+    |
+help: Remove assignment to unused variable `X_train`
+
+F841 Local variable `X_test` is assigned to but never used
+   --> src\train.py:233:5
+    |
+231 |     X_train = train[QUALI_FEATURES]
+232 |     y_train = train[QUALI_TARGET].values
+233 |     X_test  = test[QUALI_FEATURES]
+    |     ^^^^^^
+234 |     y_test  = test[QUALI_TARGET].values
+    |
+help: Remove assignment to unused variable `X_test`
+
+F841 Local variable `y_train_rank` is assigned to but never used
+   --> src\train.py:250:5
+    |
+248 |     # P1 gets relevance=21 (for 22-car grid), P22 gets relevance=0.
+249 |     MAX_GRID = 22
+250 |     y_train_rank = MAX_GRID - y_train   # invert: P1 -> highest relevance
+    |     ^^^^^^^^^^^^
+251 |     y_test_rank  = MAX_GRID - y_test
+    |
+help: Remove assignment to unused variable `y_train_rank`
+
+F841 Local variable `y_test_rank` is assigned to but never used
+   --> src\train.py:251:5
+    |
+249 |     MAX_GRID = 22
+250 |     y_train_rank = MAX_GRID - y_train   # invert: P1 -> highest relevance
+251 |     y_test_rank  = MAX_GRID - y_test
+    |     ^^^^^^^^^^^
+252 |
+253 |     # Groups: number of drivers per session, in sorted order
+    |
+help: Remove assignment to unused variable `y_test_rank`
+
+Found 15 errors.
+[*] 1 fixable with the `--fix` option (4 hidden fixes can be enabled with the `--unsafe-fixes` option).

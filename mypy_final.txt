@@ -1,0 +1,6 @@
+src\weather.py:33: error: Library stubs not installed for "requests"  [import-untyped]
+src\openf1.py:34: error: Library stubs not installed for "requests"  [import-untyped]
+src\openf1.py:34: note: Hint: "python3 -m pip install types-requests"
+src\openf1.py:34: note: (or run "mypy --install-types" to install all missing stub packages)
+src\openf1.py:34: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+Found 2 errors in 2 files (checked 10 source files)

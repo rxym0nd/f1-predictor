@@ -228,9 +228,6 @@ def train_quali_model(
     train = apply_impute_stats(train, impute_stats, QUALI_FEATURES)
     test  = apply_impute_stats(test,  impute_stats, QUALI_FEATURES)
 
-    X_train = train[QUALI_FEATURES]
-    y_train = train[QUALI_TARGET].values
-    X_test  = test[QUALI_FEATURES]
     y_test  = test[QUALI_TARGET].values
 
     sample_weight = compute_sample_weights(train["Year"])
@@ -247,8 +244,6 @@ def train_quali_model(
     # Relevance target: higher = better qualifier.
     # P1 gets relevance=21 (for 22-car grid), P22 gets relevance=0.
     MAX_GRID = 22
-    y_train_rank = MAX_GRID - y_train   # invert: P1 -> highest relevance
-    y_test_rank  = MAX_GRID - y_test
 
     # Groups: number of drivers per session, in sorted order
     train_sorted   = train.sort_values(["Year", "RoundNumber"]).reset_index(drop=True)
@@ -328,7 +323,7 @@ def train_quali_model(
 def train_race_model(
     df: pd.DataFrame,
     encoders: dict,
-) -> tuple[object, dict]:
+) -> tuple[object, object, dict]:
     """
     Train XGBoost classifier on Podium, then calibrate probabilities.
     Calibration wraps the trained model with isotonic regression fit on

@@ -115,6 +115,7 @@ def is_chaos_race(
 
 def fetch_actual_quali(year: int, round_number: int) -> pd.DataFrame:
     fastf1.Cache.enable_cache(str(CACHE_DIR))
+    laps = pd.DataFrame()
     for label in ("Q", "SQ"):
         try:
             session = fastf1.get_session(year, round_number, label)

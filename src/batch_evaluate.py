@@ -110,13 +110,18 @@ def print_summary(year: int, results: list[dict]):
              "Round", "Event", "MAE pos", "Spearman ρ", "Brier", "Top-3")
     log.info("-" * 72)
 
-    maes = []; rhos = []; briers = []; overlaps = []
+    maes = []
+    rhos = []
+    briers = []
+    overlaps = []
 
     for r in results:
         q  = r.get("quali", {})
         rc = r.get("race",  {})
-        mae = q.get("MAE_positions"); rho = q.get("Spearman_rho")
-        brier = rc.get("Brier_score"); top3 = rc.get("Top3_overlap")
+        mae = q.get("MAE_positions")
+        rho = q.get("Spearman_rho")
+        brier = rc.get("Brier_score")
+        top3 = rc.get("Top3_overlap")
         flag = " ✗" if r.get("status", "ok") != "ok" else ""
         log.info(
             "%-5s %-22s %-10s %-12s %-8s %-6s%s",
@@ -127,10 +132,14 @@ def print_summary(year: int, results: list[dict]):
             f"{top3}/3" if top3 is not None else "—",
             flag,
         )
-        if mae   is not None: maes.append(mae)
-        if rho   is not None: rhos.append(rho)
-        if brier is not None: briers.append(brier)
-        if top3  is not None: overlaps.append(top3)
+        if mae is not None:
+            maes.append(mae)
+        if rho is not None:
+            rhos.append(rho)
+        if brier is not None:
+            briers.append(brier)
+        if top3 is not None:
+            overlaps.append(top3)
 
     log.info("-" * 72)
     if maes:

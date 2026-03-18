@@ -1,0 +1,13 @@
+src\weather.py:33: error: Library stubs not installed for "requests"  [import-untyped]
+src\ingest.py:207: error: Missing return statement  [return]
+src\train.py:412: error: Incompatible return value type (got "tuple[Any, Any, dict[Any, Any]]", expected "tuple[object, dict[Any, Any]]")  [return-value]
+src\predict.py:45: error: Incompatible types in assignment (expression has type "None", variable has type "Callable[[int, int], dict[Any, Any] | None]")  [assignment]
+src\predict.py:223: error: Name "results" is used before definition  [used-before-def]
+src\openf1.py:34: error: Library stubs not installed for "requests"  [import-untyped]
+src\openf1.py:34: note: Hint: "python3 -m pip install types-requests"
+src\openf1.py:34: note: (or run "mypy --install-types" to install all missing stub packages)
+src\openf1.py:34: note: See https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
+src\features.py:1209: error: Name "_load_fp_laps" already defined on line 132  [no-redef]
+src\evaluate.py:132: error: Name "laps" is used before definition  [used-before-def]
+src\dashboard.py:1123: error: Incompatible types in assignment (expression has type "float", variable has type "str")  [assignment]
+Found 9 errors in 8 files (checked 10 source files)

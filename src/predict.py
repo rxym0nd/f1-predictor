@@ -29,7 +29,6 @@ import xgboost as xgb
 
 from config import (
     CHAOS_CIRCUITS,
-    COMPOUND_ORDER,
     QUALI_FEATURES,
     RACE_FEATURES,
     ROLLING_WINDOW,
@@ -43,7 +42,7 @@ try:
     from weather import get_forecast_for_round as _get_weather_forecast
     _WEATHER_AVAILABLE = True
 except ImportError:
-    _get_weather_forecast = None
+    _get_weather_forecast = None  # type: ignore
     _WEATHER_AVAILABLE = False
 
 logging.basicConfig(
@@ -82,14 +81,11 @@ def _check_stale_data():
         )
 
 
-import logging as _logging
-
-
 def _silence_fastf1():
     """Raise FastF1 log level to CRITICAL to suppress session-load noise."""
-    ff1 = _logging.getLogger("fastf1")
+    ff1 = logging.getLogger("fastf1")
     orig = ff1.level
-    ff1.setLevel(_logging.CRITICAL)
+    ff1.setLevel(logging.CRITICAL)
     return ff1, orig
 
 
@@ -183,6 +179,7 @@ def fetch_entry_list(year: int, round_number: int) -> pd.DataFrame:
 
     last_exc: Exception | None = None
 
+    results, circuit, event_name = pd.DataFrame(), "", ""
     for attempt_round in attempts:
         try:
             ff1_log, orig_lvl = _silence_fastf1()   # suppress verbose warnings

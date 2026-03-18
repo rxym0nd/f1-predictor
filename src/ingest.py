@@ -220,6 +220,7 @@ def get_schedule(year: int) -> pd.DataFrame | None:
         except Exception as exc:
             log.error("Could not fetch schedule for %d — %s", year, exc)
             return None
+    return None
 
 
 def race_date_from_schedule(

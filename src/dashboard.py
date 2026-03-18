@@ -1120,9 +1120,9 @@ elif "Analysis" in page:
             else:
                 pred_row = df_pred[df_pred["Driver"] == shap_driver]
                 if not pred_row.empty:
-                    prob = float(pred_row["PodiumProbability"].iloc[0]) * 100
+                    prob_val = float(pred_row["PodiumProbability"].iloc[0]) * 100
                     st.markdown(
-                        f"**{shap_driver}** predicted podium probability: **{prob:.1f}%**"
+                        f"**{shap_driver}** predicted podium probability: **{prob_val:.1f}%**"
                     )
 
                 colours_shap = [
