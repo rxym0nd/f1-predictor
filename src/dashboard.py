@@ -59,6 +59,7 @@ MODELS_DIR      = _PROJECT_ROOT / "models"
 PROCESSED_DIR   = _PROJECT_ROOT / "data" / "processed"
 EVAL_HISTORY    = MODELS_DIR / "eval_history.json"
 
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 fastf1.Cache.enable_cache(str(CACHE_DIR))
 
 # ── Page config ───────────────────────────────────────────────────────────────
