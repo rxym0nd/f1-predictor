@@ -12,13 +12,14 @@ Session types fetched:
 
 FP1 is omitted — teams run mixed programmes and the data is noisy.
 
-FP data is marked OPTIONAL. Sessions from 2018–2020 often have timing
-data missing from the FastF1 API; these are silently skipped and do not
-count as failures. Q and R failures always count.
+For the current season, each session is checked individually against its
+scheduled date — FP2/FP3/Q are fetched as soon as they complete, even
+if the race hasn't happened yet. This ensures sector and FP features
+are available for mid-weekend predictions.
 
 Seasons covered:
   2018–2025 — full seasons
-  2026      — current season, completed rounds only
+  2026      — current season, per-session date checking
 
 Run from f1-predictor root:
     python src/ingest.py
@@ -43,14 +44,21 @@ RAW_DIR            = Path("data/raw")
 HISTORICAL_SEASONS = list(range(2018, 2026))   # 2018–2025 inclusive
 CURRENT_SEASON     = 2026
 
-# Required sessions — failures always counted and reported
 REQUIRED_SESSIONS = ["Q", "R"]
-
-# Optional sessions — data may not exist for older rounds; missing data
-# is silently skipped and does NOT inflate the failure count
 OPTIONAL_SESSIONS = ["FP2", "FP3"]
+SESSION_TYPES     = OPTIONAL_SESSIONS + REQUIRED_SESSIONS  # FP2, FP3, Q, R
 
-SESSION_TYPES = OPTIONAL_SESSIONS + REQUIRED_SESSIONS  # FP2, FP3, Q, R
+# Maps each session type to its scheduled date column in the FastF1 schedule
+_SESSION_DATE_COL: dict[str, str] = {
+    "FP1": "Session1Date",
+    "FP2": "Session2Date",
+    "FP3": "Session3Date",
+    "Q":   "Session4Date",
+    "R":   "Session5Date",
+}
+
+# Buffer after session ends before we try to fetch (avoids hitting API too early)
+_SESSION_BUFFER_HOURS = 2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,10 +76,9 @@ def setup_dirs():
     fastf1.Cache.enable_cache(str(CACHE_DIR))
 
 
-# ── Core fetch ────────────────────────────────────────────────────────────────
+# ── FastF1 log silencing ──────────────────────────────────────────────────────
 
 def _silence_fastf1(level: int = _logging.CRITICAL):
-    """Temporarily raise the FastF1 log level to suppress internal noise."""
     ff1 = _logging.getLogger("fastf1")
     original = ff1.level
     ff1.setLevel(level)
@@ -82,6 +89,50 @@ def _restore_fastf1(ff1_logger, original_level: int):
     ff1_logger.setLevel(original_level)
 
 
+# ── Session date helpers ──────────────────────────────────────────────────────
+
+def _session_date(
+    schedule: pd.DataFrame, round_number: int, session_type: str
+) -> datetime | None:
+    """Return the UTC datetime for a specific session, or None if unknown."""
+    row = schedule[schedule["RoundNumber"] == round_number]
+    if row.empty:
+        return None
+    col = _SESSION_DATE_COL.get(session_type)
+    if col is None or col not in row.columns:
+        return None
+    val = row[col].iloc[0]
+    if pd.isna(val):
+        return None
+    dt = pd.Timestamp(val)
+    if dt.tzinfo is None:
+        dt = dt.tz_localize("UTC")
+    return dt.to_pydatetime()
+
+
+def _session_has_completed(
+    schedule: pd.DataFrame, round_number: int, session_type: str
+) -> bool:
+    """True if the session's scheduled end time (+ buffer) has passed."""
+    session_dt = _session_date(schedule, round_number, session_type)
+    if session_dt is None:
+        return False
+    cutoff = session_dt + pd.Timedelta(hours=_SESSION_BUFFER_HOURS)
+    return datetime.now(timezone.utc) > cutoff
+
+
+def _completed_sessions(
+    schedule: pd.DataFrame, round_number: int
+) -> list[str]:
+    """Return list of session types whose scheduled date has passed."""
+    return [
+        st for st in SESSION_TYPES
+        if _session_has_completed(schedule, round_number, st)
+    ]
+
+
+# ── Core fetch ────────────────────────────────────────────────────────────────
+
 def fetch_session(
     year: int,
     round_number: int,
@@ -90,21 +141,11 @@ def fetch_session(
 ) -> dict | None:
     """
     Load a single session and return a dict of DataFrames.
-
-    For optional sessions (FP2/FP3):
-      - FastF1 internal debug noise is suppressed
-      - If timing data is unavailable the function returns None quietly
-      - The caller treats None as a soft skip, not a failure
-
-    For required sessions (Q/R):
-      - Normal logging applies
-      - None means a real failure
-
-    Retries once after 65 minutes on rate limit.
+    Returns None on failure.
+    Optional sessions suppress FastF1 noise and treat missing data as a
+    soft skip rather than a failure.
     """
     for attempt in range(2):
-        # Suppress FastF1's verbose internal logging for optional sessions
-        # that are likely to have no data (2018–2020 FP sessions especially)
         if optional:
             ff1_logger, orig_level = _silence_fastf1()
 
@@ -112,23 +153,17 @@ def fetch_session(
             session = fastf1.get_session(year, round_number, session_type)
             session.load(telemetry=False, weather=True, messages=False)
 
-            # ── Safely access laps ────────────────────────────────────────────
-            # session.load() does not raise even when laps fail internally.
-            # Accessing session.laps afterwards can raise DataNotLoadedError.
-            # We handle this explicitly so the caller gets a clean None.
             try:
                 laps = session.laps.copy()
             except Exception:
                 if optional:
-                    # FP data not available for this session — silent skip
-                    if optional:
-                        _restore_fastf1(ff1_logger, orig_level)
+                    _restore_fastf1(ff1_logger, orig_level)
                     log.debug(
-                        "No laps data for %d R%d %s — skipping (optional session)",
+                        "No laps for %d R%d %s — optional, skipping",
                         year, round_number, session_type,
                     )
                     return None
-                raise   # For Q/R, re-raise so the outer handler logs it
+                raise
 
             results = session.results.copy()
             weather = (
@@ -153,11 +188,11 @@ def fetch_session(
             if optional:
                 _restore_fastf1(ff1_logger, orig_level)
             if attempt == 0:
-                log.warning("Rate limit hit — sleeping 65 minutes before retrying...")
+                log.warning("Rate limit hit — sleeping 65 minutes...")
                 time.sleep(65 * 60)
             else:
                 log.warning(
-                    "Rate limit hit again after sleep — skipping %d R%d %s",
+                    "Rate limit again — skipping %d R%d %s",
                     year, round_number, session_type,
                 )
                 return None
@@ -165,11 +200,8 @@ def fetch_session(
         except Exception as exc:
             if optional:
                 _restore_fastf1(ff1_logger, orig_level)
-            # For optional sessions, downgrade to debug so we don't fill
-            # the terminal with unavoidable warnings about old FP data
-            if optional:
                 log.debug(
-                    "Could not load %d R%d %s — %s (optional, skipping silently)",
+                    "Could not load %d R%d %s — %s (optional)",
                     year, round_number, session_type, exc,
                 )
             else:
@@ -182,21 +214,18 @@ def fetch_session(
     return None
 
 
-def save_session(data: dict, year: int, round_number: int, session_type: str):
-    """Save each non-empty DataFrame as a Parquet file."""
+def save_session(
+    data: dict, year: int, round_number: int, session_type: str
+):
     prefix = RAW_DIR / f"{year}_R{round_number:02d}_{session_type}"
-    files_written = 0
+    written = 0
     for name, df in data.items():
         if df.empty:
             continue
-        path = Path(f"{prefix}_{name}.parquet")
-        df.to_parquet(path, index=False)
-        files_written += 1
-    if files_written > 0:
+        df.to_parquet(Path(f"{prefix}_{name}.parquet"), index=False)
+        written += 1
+    if written:
         log.info("Saved %d R%d %s", year, round_number, session_type)
-    else:
-        log.debug("Nothing to save for %d R%d %s (all DataFrames empty)",
-                  year, round_number, session_type)
 
 
 def already_saved(year: int, round_number: int, session_type: str) -> bool:
@@ -215,36 +244,12 @@ def get_schedule(year: int) -> pd.DataFrame | None:
                 )
                 time.sleep(65 * 60)
             else:
-                log.error("Could not fetch schedule for %d after retry.", year)
+                log.error("Could not fetch schedule for %d.", year)
                 return None
         except Exception as exc:
             log.error("Could not fetch schedule for %d — %s", year, exc)
             return None
     return None
-
-
-def race_date_from_schedule(
-    schedule: pd.DataFrame, round_number: int
-) -> datetime | None:
-    row = schedule[schedule["RoundNumber"] == round_number]
-    if row.empty:
-        return None
-    for col in ("Session5Date", "EventDate"):
-        if col in row.columns:
-            val = row[col].iloc[0]
-            if pd.notna(val):
-                dt = pd.Timestamp(val)
-                if dt.tzinfo is None:
-                    dt = dt.tz_localize("UTC")
-                return dt.to_pydatetime()
-    return None
-
-
-def is_round_completed(schedule: pd.DataFrame, round_number: int) -> bool:
-    race_dt = race_date_from_schedule(schedule, round_number)
-    if race_dt is None:
-        return False
-    return datetime.now(timezone.utc) > race_dt + pd.Timedelta(hours=3)
 
 
 # ── Main ingestion loop ───────────────────────────────────────────────────────
@@ -254,8 +259,11 @@ def ingest_season(
 ) -> tuple[int, int, int, int]:
     """
     Returns (saved, skipped, failed, fp_unavailable).
-    fp_unavailable counts FP sessions where data simply doesn't exist
-    in the API — these are expected for 2018–2020 and are NOT failures.
+
+    For current_season=True, each session is checked individually:
+    - FP2/FP3/Q are fetched as soon as their scheduled time has passed
+    - R is only fetched after race day
+    - Future sessions are skipped cleanly without flooding the log
     """
     schedule = get_schedule(year)
     if schedule is None:
@@ -267,21 +275,35 @@ def ingest_season(
     saved = skipped = failed = fp_unavailable = 0
 
     for round_number in rounds:
-        # For current season, skip rounds that haven't happened yet
-        if current_season and not all(
-            already_saved(year, round_number, st) for st in REQUIRED_SESSIONS
-        ):
-            if not is_round_completed(schedule, round_number):
-                log.info("Skip %d R%d — not yet completed", year, round_number)
+
+        if current_season:
+            completed = _completed_sessions(schedule, round_number)
+            if not completed:
+                log.info(
+                    "Skip %d R%d — weekend not started yet", year, round_number
+                )
                 skipped += len(SESSION_TYPES)
                 continue
+        else:
+            completed = SESSION_TYPES  # all sessions available for historical
 
         for session_type in SESSION_TYPES:
             is_optional = session_type in OPTIONAL_SESSIONS
 
+            # Skip sessions that haven't happened yet (current season only)
+            if current_season and session_type not in completed:
+                log.debug(
+                    "Skip %d R%d %s — not yet completed",
+                    year, round_number, session_type,
+                )
+                skipped += 1
+                continue
+
             if already_saved(year, round_number, session_type):
-                log.debug("Skip %d R%d %s — already saved",
-                          year, round_number, session_type)
+                log.debug(
+                    "Skip %d R%d %s — already saved",
+                    year, round_number, session_type,
+                )
                 skipped += 1
                 continue
 
@@ -291,7 +313,7 @@ def ingest_season(
 
             if data is None:
                 if is_optional:
-                    fp_unavailable += 1   # expected, not a real failure
+                    fp_unavailable += 1
                 else:
                     failed += 1
                 continue
@@ -305,33 +327,29 @@ def ingest_season(
 
 def ingest_all():
     setup_dirs()
-    total_saved = total_skipped = total_failed = total_fp_unavail = 0
+    ts = ts_sk = tf = tfp = 0
 
     for year in HISTORICAL_SEASONS:
         s, sk, f, fp = ingest_season(year, current_season=False)
-        total_saved += s
-        total_skipped += sk
-        total_failed += f
-        total_fp_unavail += fp
+        ts += s; ts_sk += sk; tf += f; tfp += fp
 
-    log.info("── %d  (current season — completed rounds only) ──", CURRENT_SEASON)
+    log.info(
+        "── %d  (current season — per-session date checking) ──",
+        CURRENT_SEASON,
+    )
     s, sk, f, fp = ingest_season(CURRENT_SEASON, current_season=True)
-    total_saved += s
-    total_skipped += sk
-    total_failed += f
-    total_fp_unavail += fp
+    ts += s; ts_sk += sk; tf += f; tfp += fp
 
     log.info(
         "Done. Saved: %d  |  Skipped: %d  |  Failed (Q/R): %d  |  "
         "FP unavailable (expected for old seasons): %d",
-        total_saved, total_skipped, total_failed, total_fp_unavail,
+        ts, ts_sk, tf, tfp,
     )
-    if total_fp_unavail > 0:
+    if tfp > 0:
         log.info(
-            "Note: %d FP sessions had no timing data in the FastF1 API. "
-            "This is normal for 2018–2020. FP features will be imputed "
-            "from global medians for those rounds during training.",
-            total_fp_unavail,
+            "Note: %d FP sessions had no timing data — normal for 2018–2020. "
+            "FP features will be imputed from medians for those rounds.",
+            tfp,
         )
 
 

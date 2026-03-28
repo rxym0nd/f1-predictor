@@ -135,7 +135,6 @@ def fetch_race_weekend_forecast(
         "start_date":        race_date,
         "end_date":          race_date,
         "timezone":          "UTC",
-        "forecast_days":     1,
     }
 
     try:
