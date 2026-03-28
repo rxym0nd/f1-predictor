@@ -475,6 +475,8 @@ def build_prediction_features(
         df[col] = np.nan
 
     # ── Filter history ────────────────────────────────────────────────────────
+    # prior_quali / prior_race: everything before this round.
+    # Used for global medians, weather fallback, circuit affinity, champ context.
     prior_quali = hist_quali[
         (hist_quali["Year"] < year) |
         ((hist_quali["Year"] == year) & (hist_quali["RoundNumber"] < round_number))
@@ -485,6 +487,30 @@ def build_prediction_features(
         ((hist_race["Year"] == year) & (hist_race["RoundNumber"] < round_number))
     ].copy()
 
+    # ── Regulation cold-start ─────────────────────────────────────────────────
+    # rolling_quali / rolling_race: used for ALL rolling driver/constructor form.
+    # When years_since_reg_change == 0 (new regs), historical rolling data from
+    # the previous era actively misleads the model. VER won 2025 on merit but
+    # Red Bull's 2026 car is mid-pack — the model must not know 2025 VER stats.
+    # Restricting to current-season data forces imputation to global medians for
+    # most drivers, which levels the field and lets FP2/FP3 pace dominate.
+    # H2H is also era-scoped: 2025 teammate pairs are completely different in 2026.
+    # Circuit affinity still uses full history (circuit layout is unchanged).
+    _reg_cold_start = years_since_reg_change(year) == 0
+    if _reg_cold_start:
+        rolling_quali = prior_quali[prior_quali["Year"] == year].copy()
+        rolling_race  = prior_race[prior_race["Year"] == year].copy()
+        log.info(
+            "Regulation cold-start mode active (YearsSinceLastRegChange=0): "
+            "rolling features restricted to %d season data "
+            "(%d quali rows, %d race rows). FP2/FP3 features will dominate.",
+            year, len(rolling_quali), len(rolling_race),
+        )
+    else:
+        rolling_quali = prior_quali
+        rolling_race  = prior_race
+
+    # Global medians always from full history for stable fallback values
     global_q_gap  = prior_quali["GapToPole_s"].median()
     global_q_pos  = prior_quali["QualiPos"].median()
     global_finish = (
@@ -500,33 +526,38 @@ def build_prediction_features(
         w = weights[-len(arr):]
         return float(np.dot(arr, w) / w.sum()) if len(arr) > 0 else float("nan")
 
-    # ── 1. Driver rolling quali form ──────────────────────────────────────────
+    # ── 1. Driver rolling quali form (era-scoped) ─────────────────────────────
     for driver in df["Driver"]:
         mask = df["Driver"] == driver
-        dq = (prior_quali[prior_quali["Driver"] == driver]
+        dq = (rolling_quali[rolling_quali["Driver"] == driver]
               .sort_values(["Year", "RoundNumber"]).tail(ROLLING_WINDOW))
         if len(dq) == 0:
-            df.loc[mask, "RollingQualiGap"]    = global_q_gap
-            df.loc[mask, "RollingQualiPos"]    = global_q_pos
-            df.loc[mask, "RollingQualiStdGap"] = 0.0
+            # Cold-start: no same-era data — leave NaN so imputation uses
+            # train medians. This intentionally levels the field for all
+            # drivers rather than locking in stale cross-era values.
+            if not _reg_cold_start:
+                df.loc[mask, "RollingQualiGap"]    = global_q_gap
+                df.loc[mask, "RollingQualiPos"]    = global_q_pos
+                df.loc[mask, "RollingQualiStdGap"] = 0.0
         else:
             df.loc[mask, "RollingQualiGap"]    = _wavg(dq["GapToPole_s"])
             df.loc[mask, "RollingQualiPos"]    = _wavg(dq["QualiPos"])
             std = dq["GapToPole_s"].std(ddof=0)
             df.loc[mask, "RollingQualiStdGap"] = 0.0 if np.isnan(std) else float(std)
 
-    # ── 2. Constructor rolling quali form ─────────────────────────────────────
+    # ── 2. Constructor rolling quali form (era-scoped) ────────────────────────
     for team in df["TeamName"].unique():
         mask = df["TeamName"] == team
-        tq = (prior_quali[prior_quali["TeamName"] == team]
+        tq = (rolling_quali[rolling_quali["TeamName"] == team]
               .sort_values(["Year", "RoundNumber"]).tail(ROLLING_WINDOW * 2))
-        if len(tq) == 0:
-            df.loc[mask, "ConRollingQualiGap"] = global_q_gap
-        else:
+        if len(tq) > 0:
             team_avg = tq.groupby(["Year", "RoundNumber"])["GapToPole_s"].mean()
             df.loc[mask, "ConRollingQualiGap"] = _wavg(team_avg.tail(ROLLING_WINDOW))
+        elif not _reg_cold_start:
+            df.loc[mask, "ConRollingQualiGap"] = global_q_gap
+        # cold-start + no data: leave NaN → imputed to median
 
-    # ── 3. Circuit affinity ───────────────────────────────────────────────────
+    # ── 3. Circuit affinity (full history — circuit layout unchanged by regs) ──
     for driver in df["Driver"]:
         mask   = df["Driver"] == driver
         c_hist = prior_quali[
@@ -547,7 +578,10 @@ def build_prediction_features(
             df.loc[mask, "CircuitAvgQualiPos"] = float(c_hist["QualiPos"].mean())
             df.loc[mask, "CircuitVisits"]      = float(len(c_hist))
 
-    # ── 4. Teammate H2H ───────────────────────────────────────────────────────
+    # ── 4. Teammate H2H (era-scoped) ──────────────────────────────────────────
+    # Cold-start: many teams have new pairings in 2026 (HAM/LEC at Ferrari,
+    # ANT/RUS at Mercedes). 2025 H2H where they were on different teams is
+    # meaningless — correctly falls back to 0.5 for new pairings.
     for team in df["TeamName"].unique():
         team_drivers = df[df["TeamName"] == team]["Driver"].tolist()
         if len(team_drivers) < 2:
@@ -556,8 +590,8 @@ def build_prediction_features(
         for driver in team_drivers:
             mask = df["Driver"] == driver
             teammate = [d for d in team_drivers if d != driver]
-            driver_q   = prior_quali[prior_quali["Driver"] == driver]
-            teammate_q = prior_quali[prior_quali["Driver"].isin(teammate)]
+            driver_q   = rolling_quali[rolling_quali["Driver"] == driver]
+            teammate_q = rolling_quali[rolling_quali["Driver"].isin(teammate)]
             common_sessions = set(
                 zip(driver_q["Year"], driver_q["RoundNumber"])
             ) & set(zip(teammate_q["Year"], teammate_q["RoundNumber"]))
@@ -577,18 +611,20 @@ def build_prediction_features(
             total = min(len(common_sessions), ROLLING_WINDOW)
             df.loc[mask, "H2H_QualiWinRate"] = wins / total if total > 0 else 0.5
 
-    # ── 5. Driver rolling race form ───────────────────────────────────────────
+    # ── 5. Driver rolling race form (era-scoped) ──────────────────────────────
     for driver in df["Driver"]:
         mask = df["Driver"] == driver
-        dr = (prior_race[prior_race["Driver"] == driver]
+        dr = (rolling_race[rolling_race["Driver"] == driver]
               .sort_values(["Year", "RoundNumber"]).tail(ROLLING_WINDOW))
         if len(dr) == 0:
-            df.loc[mask, "RollingAvgFinish"]  = global_finish
-            df.loc[mask, "RollingAvgGrid"]    = global_finish
-            df.loc[mask, "RollingPoints"]     = 0.0
-            df.loc[mask, "RollingPodiumRate"] = 0.0
-            df.loc[mask, "RollingDNFRate"]    = 0.0
-            df.loc[mask, "DNFStreak"]         = 0.0
+            if not _reg_cold_start:
+                df.loc[mask, "RollingAvgFinish"]  = global_finish
+                df.loc[mask, "RollingAvgGrid"]    = global_finish
+                df.loc[mask, "RollingPoints"]     = 0.0
+                df.loc[mask, "RollingPodiumRate"] = 0.0
+                df.loc[mask, "RollingDNFRate"]    = 0.0
+                df.loc[mask, "DNFStreak"]         = 0.0
+            # cold-start + no data: leave NaN → imputed to median (levels field)
         else:
             finish = pd.to_numeric(dr["FinishPos"], errors="coerce")
             points = pd.to_numeric(dr["Points"],    errors="coerce").fillna(0)
@@ -601,15 +637,12 @@ def build_prediction_features(
             df.loc[mask, "RollingDNFRate"]    = _wavg(dnf)
             df.loc[mask, "DNFStreak"]         = float(dnf.tail(3).sum())
 
-    # ── 6. Constructor rolling race form ──────────────────────────────────────
+    # ── 6. Constructor rolling race form (era-scoped) ─────────────────────────
     for team in df["TeamName"].unique():
         mask = df["TeamName"] == team
-        tr = (prior_race[prior_race["TeamName"] == team]
+        tr = (rolling_race[rolling_race["TeamName"] == team]
               .sort_values(["Year", "RoundNumber"]).tail(ROLLING_WINDOW * 2))
-        if len(tr) == 0:
-            df.loc[mask, "ConRollingAvgFinish"] = global_finish
-            df.loc[mask, "ConRollingPoints"]    = 0.0
-        else:
+        if len(tr) > 0:
             team_avg = (
                 tr.groupby(["Year", "RoundNumber"])
                 .agg(
@@ -630,6 +663,10 @@ def build_prediction_features(
             df.loc[mask, "ConRollingPoints"] = _wavg(
                 team_avg["TotalPoints"].tail(ROLLING_WINDOW)
             )
+        elif not _reg_cold_start:
+            df.loc[mask, "ConRollingAvgFinish"] = global_finish
+            df.loc[mask, "ConRollingPoints"]    = 0.0
+        # cold-start + no data: leave NaN → imputed to median
 
     # ── 7. Championship context (current year only) ───────────────────────────
     cy_race = prior_race[prior_race["Year"] == year]
