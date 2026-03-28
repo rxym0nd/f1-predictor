@@ -66,6 +66,39 @@ CHAOS_CIRCUITS: set[str] = {
     "Montreal",
 }
 
+# ── Circuit safety car rates ───────────────────────────────────────────────────
+# Historical fraction of race laps run under SC or VSC (2018–2025 averages).
+# Shared by features.py (training) and predict.py (inference) to ensure
+# identical values at both stages.  Update after each season.
+KNOWN_SC_RATES: dict[str, float] = {
+    "Melbourne":         0.28,
+    "Sakhir":            0.15,
+    "Jeddah":            0.22,
+    "Shanghai":          0.18,
+    "Suzuka":            0.10,
+    "Monaco":            0.35,
+    "Montreal":          0.25,
+    "Spielberg":         0.20,
+    "Silverstone":       0.18,
+    "Budapest":          0.12,
+    "Spa-Francorchamps": 0.14,
+    "Zandvoort":         0.16,
+    "Monza":             0.14,
+    "Baku":              0.30,
+    "Marina Bay":        0.20,
+    "Austin":            0.22,
+    "Mexico City":       0.14,
+    "São Paulo":         0.32,
+    "Las Vegas":         0.20,
+    "Lusail":            0.18,
+    "Yas Island":        0.12,
+    "Imola":             0.22,
+    "Miami":             0.20,
+    "Portimão":          0.18,
+    "Madrid":            0.16,
+}
+DEFAULT_SC_RATE: float = 0.18  # global average for unknown circuits
+
 
 def circuit_type_flags(circuit_name: str) -> dict[str, int]:
     c = str(circuit_name)

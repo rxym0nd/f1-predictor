@@ -7,6 +7,7 @@ Changes in this version (items #5, #9, #10):
   - compute_constructor_championship_context(): ConChampDelta, ConChampPos
   - compute_circuit_sc_rate(): historical SC/VSC fraction per circuit
   - compute_career_race_count(): CareerRaceCount for cold-start handling
+  - KNOWN_SC_RATES moved to config.py so predict.py can share them
 
 Run from f1-predictor root:
     python src/features.py
@@ -21,6 +22,8 @@ import pandas as pd
 from config import (
     CHAOS_CIRCUITS,
     COMPOUND_ORDER,
+    DEFAULT_SC_RATE,
+    KNOWN_SC_RATES,
     ROLLING_WINDOW,
     circuit_type_flags,
     grid_difficulty_score,
@@ -572,7 +575,6 @@ def compute_championship_context(race_results: pd.DataFrame) -> pd.DataFrame:
     ]].drop_duplicates()
 
 
-
 # ── Qualifying phase reached ──────────────────────────────────────────────────
 
 def compute_quali_phase(best_quali: pd.DataFrame) -> pd.DataFrame:
@@ -671,6 +673,7 @@ def compute_tyre_features(r_laps: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         base_d = laps[["Year", "RoundNumber", "Driver"]].drop_duplicates()
+        base_d = base_d.copy()
         base_d["StartCompound_enc"] = 2
         base_d["StartTyreLife"]     = 0
         base_d["FreshStartTyre"]    = 1
@@ -811,7 +814,6 @@ def compute_chaos_flag(race_results: pd.DataFrame) -> pd.DataFrame:
     log.info("Computed chaos circuit flags: %d rows", len(df))
     return df[["Year", "RoundNumber", "Driver", "IsChaosCircuit"]]
 
-# ── Master feature builders ───────────────────────────────────────────────────
 
 # ── Item #10: Career race count ───────────────────────────────────────────────
 
@@ -894,8 +896,7 @@ def compute_constructor_championship_context(
 def compute_circuit_sc_rate(race_results: pd.DataFrame) -> pd.DataFrame:
     """
     Historical fraction of race laps run under Safety Car or VSC at each
-    circuit. Computed from track_status parquets when available, falling
-    back to a circuit-type heuristic if not.
+    circuit. Uses KNOWN_SC_RATES from config.py (shared with predict.py).
 
     High SC circuits (Monaco ~0.35, Melbourne ~0.25) should widen the
     podium probability distribution — mid-field drivers have a realistic
@@ -905,40 +906,9 @@ def compute_circuit_sc_rate(race_results: pd.DataFrame) -> pd.DataFrame:
              This is the historical average — same value for all drivers
              at a given circuit.
     """
-    # Known SC rates derived from historical data (2018–2025 averages)
-    # These are pre-computed rather than derived at runtime to keep
-    # features.py fast. Update after each season.
-    KNOWN_SC_RATES: dict[str, float] = {
-        "Melbourne":         0.28,
-        "Sakhir":            0.15,
-        "Jeddah":            0.22,
-        "Shanghai":          0.18,
-        "Suzuka":            0.10,
-        "Monaco":            0.35,
-        "Montreal":          0.25,
-        "Spielberg":         0.20,
-        "Silverstone":       0.18,
-        "Budapest":          0.12,
-        "Spa-Francorchamps": 0.14,
-        "Zandvoort":         0.16,
-        "Monza":             0.14,
-        "Baku":              0.30,
-        "Marina Bay":        0.20,
-        "Austin":            0.22,
-        "Mexico City":       0.14,
-        "São Paulo":         0.32,
-        "Las Vegas":         0.20,
-        "Lusail":            0.18,
-        "Yas Island":        0.12,
-        "Imola":             0.22,
-        "Miami":             0.20,
-        "Portimão":          0.18,
-        "Madrid":            0.16,
-    }
-    DEFAULT_SC_RATE = 0.18  # global average for unknown circuits
-
     r = _normalise_driver_col(race_results.copy())
     driver_circuit = r[["Year", "RoundNumber", "Driver", "CircuitShortName"]].drop_duplicates()
+    driver_circuit = driver_circuit.copy()
     driver_circuit["CircuitSCRate"] = (
         driver_circuit["CircuitShortName"]
         .map(KNOWN_SC_RATES)
@@ -950,6 +920,8 @@ def compute_circuit_sc_rate(race_results: pd.DataFrame) -> pd.DataFrame:
         "Year", "RoundNumber", "Driver", "CircuitSCRate",
     ]].drop_duplicates()
 
+
+# ── Master feature builders ───────────────────────────────────────────────────
 
 def build_quali_features() -> pd.DataFrame:
     q_laps    = load_all_sessions("Q")
@@ -1071,7 +1043,7 @@ def build_quali_features() -> pd.DataFrame:
     df["CareerRaceCount"] = df["CareerRaceCount"].fillna(0).astype(int)
     df["ConChampDelta"]   = df["ConChampDelta"].fillna(df["ConChampDelta"].median())
     df["ConChampPos"]     = df["ConChampPos"].fillna(10).astype(int)
-    df["CircuitSCRate"]   = df["CircuitSCRate"].fillna(0.18)
+    df["CircuitSCRate"]   = df["CircuitSCRate"].fillna(DEFAULT_SC_RATE)
 
     circuit_flags = df["CircuitShortName"].apply(
         lambda c: pd.Series(circuit_type_flags(str(c)))
@@ -1157,7 +1129,6 @@ def build_race_features(quali_df: pd.DataFrame) -> pd.DataFrame:
     df = df.merge(champ_ctx, on=["Year", "RoundNumber", "Driver"], how="left")
 
     # Career race count, constructor championship context, circuit SC rate
-    # These are computed above but were missing from the merge chain.
     df = df.merge(career_count,   on=["Year", "RoundNumber", "Driver"], how="left")
     df = df.merge(
         con_champ_ctx[[
@@ -1170,7 +1141,7 @@ def build_race_features(quali_df: pd.DataFrame) -> pd.DataFrame:
     df["CareerRaceCount"] = df["CareerRaceCount"].fillna(0).astype(int)
     df["ConChampDelta"]   = df["ConChampDelta"].fillna(df["ConChampDelta"].median())
     df["ConChampPos"]     = df["ConChampPos"].fillna(10).astype(int)
-    df["CircuitSCRate"]   = df["CircuitSCRate"].fillna(0.18)
+    df["CircuitSCRate"]   = df["CircuitSCRate"].fillna(DEFAULT_SC_RATE)
 
     df = df.merge(grid_penalties, on=["Year", "RoundNumber", "Driver"], how="left")
     df["GridPenaltyPlaces"] = df["GridPenaltyPlaces"].fillna(0).astype(int)
@@ -1204,9 +1175,6 @@ def build_race_features(quali_df: pd.DataFrame) -> pd.DataFrame:
 
     log.info("Race feature table: %d rows, %d columns", *df.shape)
     return df
-
-
-
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

@@ -3,12 +3,30 @@ predict.py
 
 Pre-race prediction runner.
 
-Changes over v1:
-  - Uses calibrated race model (predict_proba gives honest percentages)
-  - Computes H2H_QualiWinRate, DNFStreak, GridDifficultyScore
-  - Championship context scoped to current year only (was multi-year bug)
-  - fetch_entry_list treats 0-driver loads as failures (was silent crash)
-  - Round-1 safe: no fallback to round 0
+Bug fixes over previous version:
+  1. CIRCUIT BUG — fetch_entry_list fell back to a prior round's session for
+     the driver list, and then used THAT round's circuit name for every
+     circuit-specific feature (affinity, SC rate, flags, overtaking difficulty).
+     Fix: circuit and event_name are now always resolved from the TARGET round's
+     FastF1 schedule entry, independent of whichever round was used for the
+     driver list fallback.
+
+  2. FP2/FP3 NOT APPLIED — ingest.py saves raw FP2/FP3 parquets for the
+     current weekend, but predict.py only reads from processed parquets which
+     are only updated when features.py is re-run. With fresh FP data sitting
+     unused, FP3_BestLap_s, FP3_PaceRank, FP2_LongRunPace_s etc. were all
+     imputed from train-set medians — every driver got the same flat value.
+     Fix: predict.py now reads the raw FP2/FP3 parquets for the current round
+     directly (using the same extraction functions as features.py) and injects
+     the real values before imputation runs.
+
+  3. MISSING FEATURES — ConChampDelta, ConChampPos, CareerRaceCount, and
+     CircuitSCRate were never computed in build_prediction_features; they fell
+     through to train-set median imputation.  This made all 2026 rookies look
+     like 150-race veterans (CareerRaceCount imputed to median ~150) and gave
+     every team the same championship context.
+     Fix: all four features are now computed from prior_race / KNOWN_SC_RATES
+     inside build_prediction_features.
 
 Usage:
     python src/predict.py --year 2026 --round 3
@@ -29,6 +47,8 @@ import xgboost as xgb
 
 from config import (
     CHAOS_CIRCUITS,
+    DEFAULT_SC_RATE,
+    KNOWN_SC_RATES,
     QUALI_FEATURES,
     RACE_FEATURES,
     ROLLING_WINDOW,
@@ -37,6 +57,9 @@ from config import (
     normalise_team,
     years_since_reg_change,
 )
+
+# Import FP extraction functions from features.py so logic stays in sync
+from features import extract_fp2_longruns, extract_fp3_pace
 
 try:
     from weather import get_forecast_for_round as _get_weather_forecast
@@ -53,20 +76,21 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 CACHE_DIR       = Path("cache")
+RAW_DIR         = Path("data/raw")
 PROCESSED_DIR   = Path("data/processed")
 MODELS_DIR      = Path("models")
 PREDICTIONS_DIR = Path("predictions")
 
 # Maximum age of raw data files before a staleness warning is raised.
-# If the most recent parquet in data/raw/ is older than this, the sector
-# gap features will be from a different circuit. Default: 8 days.
 _STALE_DATA_DAYS = 8
+
+# Long-run threshold must match features.py
+_LONG_RUN_THRESHOLD = 1.07
 
 
 def _check_stale_data():
     """Warn if raw data files haven't been updated recently."""
-    raw_dir = Path("data/raw")
-    parquets = list(raw_dir.glob("*.parquet"))
+    parquets = list(RAW_DIR.glob("*.parquet"))
     if not parquets:
         return
     latest_mtime = max(p.stat().st_mtime for p in parquets)
@@ -81,8 +105,34 @@ def _check_stale_data():
         )
 
 
+def _check_processed_stale(year: int, round_number: int):
+    """
+    Warn if raw FP parquets for this round are newer than the processed
+    parquets, meaning features.py has not been re-run since ingest.py ran.
+    predict.py now injects FP features directly so this is non-fatal, but
+    the processed parquets still carry historical rolling features that
+    should also be kept current.
+    """
+    raw_fp_files = list(RAW_DIR.glob(f"{year}_R{round_number:02d}_FP*_laps.parquet"))
+    processed_file = PROCESSED_DIR / "quali_features.parquet"
+
+    if not raw_fp_files or not processed_file.exists():
+        return
+
+    newest_raw = max(p.stat().st_mtime for p in raw_fp_files)
+    proc_mtime = processed_file.stat().st_mtime
+
+    if newest_raw > proc_mtime:
+        log.warning(
+            "Raw FP data for %d R%d is newer than processed parquets. "
+            "Run 'python src/features.py && python src/train.py' to incorporate "
+            "the latest data into rolling features for future rounds. "
+            "This prediction uses FP features injected directly from raw files.",
+            year, round_number,
+        )
+
+
 def _silence_fastf1():
-    """Raise FastF1 log level to CRITICAL to suppress session-load noise."""
     ff1 = logging.getLogger("fastf1")
     orig = ff1.level
     ff1.setLevel(logging.CRITICAL)
@@ -161,16 +211,142 @@ def load_historical_race_results() -> pd.DataFrame:
     return df
 
 
+# ── FP raw data loader for current round ─────────────────────────────────────
+
+def _load_raw_fp_laps(year: int, round_number: int, session_type: str) -> pd.DataFrame:
+    """
+    Load raw FP laps parquet for the specific round saved by ingest.py.
+    Returns an empty DataFrame if the file does not exist yet.
+    Normalises LapTime to seconds and driver abbreviation column.
+    """
+    pattern = f"{year}_R{round_number:02d}_{session_type}_laps.parquet"
+    path = RAW_DIR / pattern
+    if not path.exists():
+        log.debug("No raw %s laps for %d R%d — will be imputed", session_type, year, round_number)
+        return pd.DataFrame()
+
+    df = pd.read_parquet(path)
+
+    # Normalise driver column
+    if "Abbreviation" in df.columns and "Driver" not in df.columns:
+        df = df.rename(columns={"Abbreviation": "Driver"})
+
+    # Convert LapTime to seconds
+    try:
+        df["LapTime_s"] = pd.to_timedelta(df["LapTime"]).dt.total_seconds()
+    except Exception:
+        df["LapTime_s"] = pd.to_numeric(df.get("LapTime_s", np.nan), errors="coerce")
+
+    df = df.dropna(subset=["LapTime_s"])
+    log.info("Loaded %d raw %s laps for %d R%d", len(df), session_type, year, round_number)
+    return df
+
+
+def _load_current_round_fp_features(year: int, round_number: int) -> dict[str, pd.Series]:
+    """
+    Load FP2 and FP3 raw laps for this specific round from data/raw/,
+    extract pace features using the same functions as features.py,
+    and return a dict mapping driver abbreviation -> feature dict.
+
+    Returns an empty dict if no raw FP data exists for this round.
+    The caller merges these values into the prediction DataFrame before
+    imputation runs, so real FP data always takes precedence over medians.
+    """
+    fp3_laps = _load_raw_fp_laps(year, round_number, "FP3")
+    fp2_laps = _load_raw_fp_laps(year, round_number, "FP2")
+
+    fp3_pace     = extract_fp3_pace(fp3_laps)
+    fp2_longruns = extract_fp2_longruns(fp2_laps)
+
+    # Filter to just this round (should already be, but be safe)
+    if not fp3_pace.empty:
+        fp3_pace = fp3_pace[
+            (fp3_pace["Year"] == year) & (fp3_pace["RoundNumber"] == round_number)
+        ]
+    if not fp2_longruns.empty:
+        fp2_longruns = fp2_longruns[
+            (fp2_longruns["Year"] == year) & (fp2_longruns["RoundNumber"] == round_number)
+        ]
+
+    # Build a driver-keyed lookup
+    result: dict[str, dict] = {}
+
+    for _, row in fp3_pace.iterrows():
+        d = str(row["Driver"])
+        result.setdefault(d, {})
+        result[d]["FP3_BestLap_s"]      = row["FP3_BestLap_s"]
+        result[d]["FP3_GapToFastest_s"] = row["FP3_GapToFastest_s"]
+        result[d]["FP3_PaceRank"]        = row["FP3_PaceRank"]
+
+    for _, row in fp2_longruns.iterrows():
+        d = str(row["Driver"])
+        result.setdefault(d, {})
+        result[d]["FP2_LongRunPace_s"]  = row["FP2_LongRunPace_s"]
+        result[d]["FP2_LongRunRank"]    = row["FP2_LongRunRank"]
+        result[d]["FP2_LongRunDelta_s"] = row["FP2_LongRunDelta_s"]
+
+    if result:
+        fp3_count = sum(1 for v in result.values() if "FP3_BestLap_s" in v)
+        fp2_count = sum(1 for v in result.values() if "FP2_LongRunPace_s" in v)
+        log.info(
+            "Injecting live FP features for %d R%d: "
+            "FP3 pace for %d drivers, FP2 long-run for %d drivers",
+            year, round_number, fp3_count, fp2_count,
+        )
+    else:
+        log.warning(
+            "No raw FP data found for %d R%d — FP features will be imputed from medians. "
+            "Run ingest.py to fetch FP2/FP3 data for this weekend.",
+            year, round_number,
+        )
+
+    return result
+
+
 # ── Entry list fetcher ────────────────────────────────────────────────────────
 
 def fetch_entry_list(year: int, round_number: int) -> pd.DataFrame:
     """
     Fetch the driver entry list for the target round via FastF1.
+
+    BUG FIX: The circuit name and event name are always resolved from the
+    TARGET round's schedule entry (via fastf1.get_event), regardless of
+    which fallback round was used to obtain the driver list.  Previously,
+    when R3 returned 0 drivers and we fell back to R2, the R2 circuit
+    (Shanghai) was used for all circuit-specific features instead of the
+    R3 circuit (Suzuka) — poisoning affinity, SC rate, flags, overtaking
+    difficulty, and weather historical fallbacks.
+
     Falls back to up to 2 previous rounds if the target has no data yet.
     Treats 0-driver loads as failures (FastF1 quirk for future sessions).
     """
     fastf1.Cache.enable_cache(str(CACHE_DIR))
 
+    # ── Step 1: Resolve the TARGET round's circuit from the schedule ──────────
+    # This is done independently and always refers to the round we are
+    # predicting — never to a fallback round.
+    target_circuit    = ""
+    target_event_name = ""
+    try:
+        ff1_log, orig_lvl = _silence_fastf1()
+        try:
+            target_event      = fastf1.get_event(year, round_number)
+            target_circuit    = target_event["Location"]
+            target_event_name = target_event["EventName"]
+        finally:
+            _restore_fastf1(ff1_log, orig_lvl)
+        log.info(
+            "Resolved target round: %s %d Round %d (circuit: %s)",
+            target_event_name, year, round_number, target_circuit,
+        )
+    except Exception as exc:
+        log.warning(
+            "Could not resolve circuit for %d R%d from schedule: %s — "
+            "will use fallback session's circuit as last resort.",
+            year, round_number, exc,
+        )
+
+    # ── Step 2: Get the driver list, falling back to prior rounds if needed ───
     attempts = [round_number]
     if round_number > 1:
         attempts.append(round_number - 1)
@@ -178,36 +354,47 @@ def fetch_entry_list(year: int, round_number: int) -> pd.DataFrame:
         attempts.append(round_number - 2)
 
     last_exc: Exception | None = None
+    results = pd.DataFrame()
+    fallback_circuit    = target_circuit      # will be overwritten only as last resort
+    fallback_event_name = target_event_name
 
-    results, circuit, event_name = pd.DataFrame(), "", ""
     for attempt_round in attempts:
         try:
-            ff1_log, orig_lvl = _silence_fastf1()   # suppress verbose warnings
+            ff1_log, orig_lvl = _silence_fastf1()
             try:
-                session    = fastf1.get_session(year, attempt_round, "R")
+                session = fastf1.get_session(year, attempt_round, "R")
                 session.load(telemetry=False, weather=False, messages=False)
             finally:
                 _restore_fastf1(ff1_log, orig_lvl)
-            results    = session.results.copy()
-            circuit    = session.event["Location"]
-            event_name = session.event["EventName"]
+
+            results = session.results.copy()
 
             if results.empty or len(results) == 0:
                 log.warning(
                     "R%d (%s) loaded but returned 0 drivers — "
                     "session data not yet available, trying fallback",
-                    attempt_round, event_name,
+                    attempt_round, session.event["EventName"],
                 )
                 continue
 
             if attempt_round != round_number:
                 log.info(
-                    "R%d not yet available — using entry list from R%d (%s) as proxy",
-                    round_number, attempt_round, event_name,
+                    "R%d not yet available — using driver list from R%d (%s) as proxy",
+                    round_number, attempt_round, session.event["EventName"],
                 )
+                # Only use the fallback circuit if we couldn't resolve the target
+                if not target_circuit:
+                    fallback_circuit    = session.event["Location"]
+                    fallback_event_name = session.event["EventName"]
+                    log.warning(
+                        "Could not resolve target circuit — falling back to R%d circuit: %s",
+                        attempt_round, fallback_circuit,
+                    )
             else:
-                log.info("Fetched entry list for %s (%d drivers)",
-                         event_name, len(results))
+                log.info(
+                    "Fetched entry list for %s (%d drivers)",
+                    session.event["EventName"], len(results),
+                )
             break
 
         except Exception as exc:
@@ -221,8 +408,13 @@ def fetch_entry_list(year: int, round_number: int) -> pd.DataFrame:
             f"Last error: {last_exc}"
         )
 
+    # ── Step 3: Normalise columns ─────────────────────────────────────────────
     if "Abbreviation" in results.columns and "Driver" not in results.columns:
         results = results.rename(columns={"Abbreviation": "Driver"})
+
+    # Always stamp the TARGET circuit/event, not the fallback session's
+    circuit    = target_circuit    or fallback_circuit
+    event_name = target_event_name or fallback_event_name
 
     entry = results[["Driver", "TeamName"]].copy()
     entry["TeamName"]         = entry["TeamName"].map(normalise_team)
@@ -241,9 +433,16 @@ def build_prediction_features(
     round_number: int,
     hist_quali: pd.DataFrame,
     hist_race: pd.DataFrame,
+    fp_features: dict,
 ) -> pd.DataFrame:
     """
     Build all feature rows for a future race using only pre-race data.
+
+    fp_features — dict of {driver: {FP3_BestLap_s, FP3_PaceRank, ...}}
+                  returned by _load_current_round_fp_features().  These
+                  are applied before imputation so real FP data takes
+                  precedence over train-set medians.
+
     All columns pre-initialised to NaN before any loop runs.
     """
     df = entry.copy()
@@ -265,6 +464,13 @@ def build_prediction_features(
         "CumPointsBefore", "ChampionshipPos_norm",
         "AirTemp_mean", "TrackTemp_mean", "Humidity_mean", "Rainfall_any",
         "IsStreetCircuit", "IsHighDownforce", "IsLowDownforce",
+        # Features previously missing from this builder
+        "ConChampDelta", "ConChampPos",
+        "CareerRaceCount",
+        "CircuitSCRate",
+        # FP features — will be overwritten from fp_features dict if available
+        "FP3_BestLap_s", "FP3_GapToFastest_s", "FP3_PaceRank",
+        "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
     ]:
         df[col] = np.nan
 
@@ -350,7 +556,6 @@ def build_prediction_features(
         for driver in team_drivers:
             mask = df["Driver"] == driver
             teammate = [d for d in team_drivers if d != driver]
-            # Look at recent sessions where this driver AND teammate both appeared
             driver_q   = prior_quali[prior_quali["Driver"] == driver]
             teammate_q = prior_quali[prior_quali["Driver"].isin(teammate)]
             common_sessions = set(
@@ -394,10 +599,7 @@ def build_prediction_features(
             df.loc[mask, "RollingPoints"]     = _wavg(points)
             df.loc[mask, "RollingPodiumRate"] = _wavg((finish <= 3).astype(float))
             df.loc[mask, "RollingDNFRate"]    = _wavg(dnf)
-            # DNFStreak: raw count in last 3 races
-            df.loc[mask, "DNFStreak"] = float(
-                dnf.tail(3).sum()
-            )
+            df.loc[mask, "DNFStreak"]         = float(dnf.tail(3).sum())
 
     # ── 6. Constructor rolling race form ──────────────────────────────────────
     for team in df["TeamName"].unique():
@@ -444,8 +646,39 @@ def build_prediction_features(
     max_pts = df["CumPointsBefore"].max()
     df["ChampionshipPos_norm"] = df["CumPointsBefore"] / max(float(max_pts), 1.0)
 
-    # ── 8. Weather ────────────────────────────────────────────────────────
-    # Priority: 1) OpenMeteo forecast  2) Historical average  3) Global defaults
+    # ── 8. Constructor championship context (FIX: was never computed) ─────────
+    # ConChampDelta = points gap to the constructor championship leader.
+    # ConChampPos   = constructor standing position (1 = P1).
+    cy_team_pts: dict[str, float] = {}
+    for team in df["TeamName"].unique():
+        pts = pd.to_numeric(
+            cy_race[cy_race["TeamName"] == team].get("Points", pd.Series(dtype=float)),
+            errors="coerce",
+        ).fillna(0).sum()
+        cy_team_pts[team] = float(pts)
+
+    max_con_pts = max(cy_team_pts.values()) if cy_team_pts else 0.0
+    sorted_teams = sorted(cy_team_pts.items(), key=lambda x: x[1], reverse=True)
+    team_pos_map = {team: pos + 1 for pos, (team, _) in enumerate(sorted_teams)}
+
+    for team in df["TeamName"].unique():
+        mask = df["TeamName"] == team
+        team_pts_val = cy_team_pts.get(team, 0.0)
+        df.loc[mask, "ConChampDelta"] = max(0.0, max_con_pts - team_pts_val)
+        df.loc[mask, "ConChampPos"]   = float(team_pos_map.get(team, len(df["TeamName"].unique())))
+
+    # ── 9. Career race count (FIX: was never computed, rookies looked like vets) ──
+    # Count races completed by each driver prior to this round across all history.
+    for driver in df["Driver"]:
+        mask = df["Driver"] == driver
+        count = len(prior_race[prior_race["Driver"] == driver])
+        df.loc[mask, "CareerRaceCount"] = float(count)
+
+    # ── 10. Circuit SC rate (FIX: was never computed, always imputed to median) ──
+    # Look up from KNOWN_SC_RATES — same source used in features.py.
+    df["CircuitSCRate"] = float(KNOWN_SC_RATES.get(circuit, DEFAULT_SC_RATE))
+
+    # ── 11. Weather ───────────────────────────────────────────────────────────
     forecast = None
     _weather_source = "defaults"
 
@@ -479,27 +712,22 @@ def build_prediction_features(
              _weather_source, float(df["AirTemp_mean"].iloc[0]),
              "YES" if bool(df["Rainfall_any"].iloc[0]) else "no")
 
-    # ── 9. Circuit flags ──────────────────────────────────────────────────────
+    # ── 12. Circuit flags ─────────────────────────────────────────────────────
     for col, val in circuit_type_flags(circuit).items():
         df[col] = val
 
-    # ── 10. Regulation cycle context ──────────────────────────────────────────
+    # ── 13. Regulation cycle context ──────────────────────────────────────────
     df["YearsSinceLastRegChange"] = years_since_reg_change(year)
 
-    # ── 11. Grid penalty — default 0 (no penalty known pre-race) ─────────────
-    # After grid penalties are announced, callers can set this per-driver.
+    # ── 14. Grid penalty — default 0 (no penalty known pre-race) ──────────────
     if "GridPenaltyPlaces" not in df.columns or df["GridPenaltyPlaces"].isna().all():
         df["GridPenaltyPlaces"] = 0
 
-    # ── 12. QualiphaseReached — imputed at median=2 (Q2 exit) pre-quali ──────
-    # Will be updated in predict() once quali model has predicted positions.
+    # ── 15. QualiphaseReached — imputed at median=2 pre-quali ─────────────────
     if "QualiphaseReached" not in df.columns or df["QualiphaseReached"].isna().all():
         df["QualiphaseReached"] = 2
 
-    # ── 13. Tyre defaults (items #3+#8) ──────────────────────────────────────
-    # Pre-race we do not know the starting compound — default to neutral values.
-    # After ingest.py fetches race laps for this round, predict.py could be
-    # extended to look up actual starting compounds. For now use medians.
+    # ── 16. Tyre defaults ─────────────────────────────────────────────────────
     for _tyre_col, _tyre_default in [
         ("StartCompound_enc", 2),
         ("StartTyreLife",     0),
@@ -512,8 +740,25 @@ def build_prediction_features(
         if _tyre_col not in df.columns or df[_tyre_col].isna().all():
             df[_tyre_col] = _tyre_default
 
-    # ── 14. Chaos flag (item #21) ─────────────────────────────────────────────
+    # ── 17. Chaos flag ────────────────────────────────────────────────────────
     df["IsChaosCircuit"] = int(circuit in CHAOS_CIRCUITS)
+
+    # ── 18. Inject live FP2/FP3 features (FIX: raw data now used directly) ────
+    # Overwrite NaN placeholders with real values extracted from this weekend's
+    # raw FP parquets.  Drivers with no FP data keep the NaN and will be
+    # imputed via impute_prediction_features.
+    fp_cols = [
+        "FP3_BestLap_s", "FP3_GapToFastest_s", "FP3_PaceRank",
+        "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+    ]
+    for driver in df["Driver"]:
+        if driver not in fp_features:
+            continue
+        driver_fp = fp_features[driver]
+        mask = df["Driver"] == driver
+        for col in fp_cols:
+            if col in driver_fp:
+                df.loc[mask, col] = driver_fp[col]
 
     return df
 
@@ -573,7 +818,8 @@ def impute_prediction_features(
 
 def predict(year: int, round_number: int) -> pd.DataFrame:
     PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
-    _check_stale_data()  # warn if raw data is old
+    _check_stale_data()
+    _check_processed_stale(year, round_number)
 
     q_model              = load_quali_model()
     r_model, r_calibrator = load_race_model()
@@ -584,6 +830,9 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
 
     hist_quali = load_historical_quali_best()
     hist_race  = load_historical_race_results()
+
+    # Load live FP features for this round from raw parquets
+    fp_features = _load_current_round_fp_features(year, round_number)
 
     entry = fetch_entry_list(year, round_number)
 
@@ -598,7 +847,9 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
         entry["EventName"].iloc[0], year, round_number, len(entry),
     )
 
-    df = build_prediction_features(entry, year, round_number, hist_quali, hist_race)
+    df = build_prediction_features(
+        entry, year, round_number, hist_quali, hist_race, fp_features
+    )
     circuit = df["CircuitShortName"].iloc[0]
 
     # ── Stage 1: Quali grid ───────────────────────────────────────────────────
@@ -609,8 +860,8 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
     q_scores = q_model.predict(X_q, validate_features=False)
     df_q["_score"] = q_scores
     pred_quali_pos = (
-    df_q["_score"].rank(ascending=False, method="first").astype(int).values
-)
+        df_q["_score"].rank(ascending=False, method="first").astype(int).values
+    )
     df_q = df_q.drop(columns=["_score"])
     df["PredictedQualiPos"] = pred_quali_pos
     df["PredictedGapToPole_s"] = (df["PredictedQualiPos"] - 1) * 0.10
@@ -640,7 +891,6 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
     )
     df["BestQualiTime_s"] = pole_base + df["PredictedQualiPos"] * 0.1
 
-    # GridDifficultyScore for the predicted grid position
     df["GridDifficultyScore"] = df.apply(
         lambda row: grid_difficulty_score(row["PredictedQualiPos"], circuit), axis=1
     )
