@@ -28,7 +28,7 @@ import logging
 import time
 from pathlib import Path
 
-import fastf1
+import fastf1  # type: ignore
 import numpy as np
 import pandas as pd
 import requests

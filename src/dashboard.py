@@ -71,79 +71,113 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown("<div class='scanline-overlay'></div>", unsafe_allow_html=True)
+st.markdown("<div class='hud-ribbon'></div>", unsafe_allow_html=True)
+
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Outfit:wght@200;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
 
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-.stApp { background-color: #080808; color: #e8e8e8; }
-section[data-testid="stSidebar"] { background-color: #0f0f0f; border-right: 1px solid #1a1a1a; }
+:root {
+    --bg-deep: #0A0A0B;
+    --kinetic-cyan: #00F2FF;
+    --redline: #FF2D55;
+    --carbon-gray: #1C1C1E;
+    --text-primary: #F0F0F0;
+    --text-muted: #808080;
+    --glass-bg: rgba(28, 28, 30, 0.75);
+    --border-dim: rgba(255, 255, 255, 0.05);
+}
 
+html, body, [class*="css"] { font-family: 'Outfit', sans-serif; }
+.stApp { background-color: var(--bg-deep); color: var(--text-primary); }
+section[data-testid="stSidebar"] { background-color: #050505; border-right: 1px solid var(--border-dim); }
+
+/* Typography */
 h1 {
-    font-family: 'Bebas Neue', sans-serif !important;
-    font-size: 3.2rem !important; letter-spacing: 0.08em !important;
-    color: #00d4ff !important; text-transform: uppercase;
-    margin-bottom: 0 !important; line-height: 1 !important;
+    font-family: 'Orbitron', sans-serif !important;
+    font-weight: 700 !important; font-size: 2.8rem !important;
+    letter-spacing: 0.15em !important; color: var(--kinetic-cyan) !important;
+    text-transform: uppercase; margin-bottom: 0 !important;
 }
 h2 {
-    font-family: 'Bebas Neue', sans-serif !important;
-    font-size: 1.8rem !important; letter-spacing: 0.06em !important;
-    color: #ffffff !important; text-transform: uppercase;
-    border-bottom: 1px solid #1e1e1e; padding-bottom: 0.3rem;
+    font-family: 'Orbitron', sans-serif !important;
+    font-size: 1.4rem !important; letter-spacing: 0.1em !important;
+    color: #fff !important; text-transform: uppercase;
+    padding-bottom: 0.5rem; border-bottom: 1px solid var(--carbon-gray);
 }
 h3 {
-    font-family: 'Space Mono', monospace !important;
-    font-size: 0.85rem !important; color: #666 !important;
-    letter-spacing: 0.1em; text-transform: uppercase; font-weight: 400 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.75rem !important; color: var(--text-muted) !important;
+    letter-spacing: 0.15em; text-transform: uppercase;
 }
+
+/* Metrics & Radar */
 [data-testid="metric-container"] {
-    background: #111111; border: 1px solid #1e1e1e; border-radius: 4px; padding: 1rem;
+    background: var(--glass-bg); backdrop-filter: blur(8px);
+    border: 1px solid var(--border-dim); border-left: 3px solid var(--kinetic-cyan);
+    border-radius: 2px; padding: 1.2rem;
 }
-[data-testid="metric-container"] label {
-    font-family: 'Space Mono', monospace !important; font-size: 0.7rem !important;
-    color: #555 !important; letter-spacing: 0.1em; text-transform: uppercase;
+[data-testid="stMetricLabel"] {
+    font-family: 'JetBrains Mono', monospace !important; font-size: 0.65rem !important;
+    color: var(--text-muted) !important; text-transform: uppercase; letter-spacing: 0.1em;
 }
-[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-family: 'Bebas Neue', sans-serif !important;
-    font-size: 2rem !important; color: #00d4ff !important;
+[data-testid="stMetricValue"] {
+    font-family: 'Orbitron', sans-serif !important; font-weight: 700 !important;
+    font-size: 1.8rem !important; color: #fff !important;
 }
-.stButton > button {
-    background: #00d4ff !important; color: #000 !important;
-    font-family: 'Bebas Neue', sans-serif !important; font-size: 1rem !important;
-    letter-spacing: 0.1em !important; border: none !important;
-    border-radius: 2px !important; padding: 0.5rem 1.5rem !important;
-    transition: opacity 0.2s !important;
+
+/* Indicators */
+.tactical-border {
+    border: 1px solid var(--carbon-gray);
+    position: relative; overflow: hidden;
 }
-.stButton > button:hover { opacity: 0.85 !important; }
-.stSelectbox > div > div {
-    background: #111 !important; border: 1px solid #1e1e1e !important;
-    color: #e8e8e8 !important; font-family: 'DM Sans', sans-serif !important;
-}
-.stDataFrame { font-family: 'Space Mono', monospace !important; font-size: 0.78rem !important; }
-.stAlert {
-    background: #0d1117 !important; border: 1px solid #1e1e1e !important;
-    border-radius: 2px !important; font-family: 'Space Mono', monospace !important;
-    font-size: 0.78rem !important;
-}
-hr { border-color: #1a1a1a !important; }
-.accent-line {
-    height: 2px;
-    background: linear-gradient(90deg, #00d4ff, transparent);
-    margin-bottom: 1.5rem;
-}
-.podium-badge {
-    display: inline-block; background: #00d4ff; color: #000;
-    border-radius: 2px; padding: 2px 8px;
-    font-family: 'Bebas Neue', sans-serif; font-size: 0.9rem; letter-spacing: 0.05em;
+.tactical-border::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 10px; height: 10px; border-top: 2px solid var(--kinetic-cyan); border-left: 2px solid var(--kinetic-cyan);
 }
 .tag {
-    font-family: 'Space Mono', monospace; font-size: 0.65rem;
-    color: #444; letter-spacing: 0.08em; text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.6rem;
+    color: var(--kinetic-cyan); letter-spacing: 0.1em; border: 1px solid rgba(0,242,255,0.2);
+    padding: 2px 6px; border-radius: 3px; display: inline-block;
 }
+.redline-tag { color: var(--redline); border-color: rgba(255,45,85,0.2); }
+
+/* Components */
+.stButton > button {
+    background: transparent !important; color: var(--kinetic-cyan) !important;
+    border: 1px solid var(--kinetic-cyan) !important;
+    font-family: 'Orbitron', sans-serif !important; font-size: 0.8rem !important;
+    border-radius: 0 !important; width: 100% !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.stButton > button:hover {
+    background: var(--kinetic-cyan) !important; color: #000 !important;
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.4) !important;
+}
+
+.stDataFrame { font-family: 'JetBrains Mono', monospace !important; font-size: 0.72rem !important; }
 .cloud-notice {
-    background: #0d1117; border: 1px solid #1e3a3a;
-    border-radius: 4px; padding: 0.6rem 1rem;
-    font-family: 'Space Mono', monospace; font-size: 0.72rem; color: #2a8a8a;
+    background: rgba(255, 45, 85, 0.05); border: 1px solid rgba(255, 45, 85, 0.2);
+    padding: 0.8rem; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; color: var(--redline); line-height: 1.4;
+}
+
+/* HUD Overlay Elements */
+.hud-ribbon {
+    height: 4px; background: linear-gradient(90deg, var(--kinetic-cyan), var(--redline), transparent);
+    margin-bottom: 2rem;
+}
+
+@keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+.scanline-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 10; pointer-events: none; opacity: 0.15;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -214,14 +248,26 @@ def team_colour(team: str) -> str:
     return colours.get(team, "#555555")
 
 
-def _plotly_layout(height: int = 300) -> dict:
+def _plotly_layout(height: int = 400) -> dict:
     return dict(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         height=height,
-        margin=dict(l=0, r=60, t=10, b=40),
-        showlegend=False,
-        font=dict(family="Space Mono"),
+        xaxis=dict(
+            gridcolor="#1C1C1E",
+            zerolinecolor="#333",
+            tickfont=dict(color="#808080", family="JetBrains Mono", size=9),
+        ),
+        yaxis=dict(
+            gridcolor="#1C1C1E",
+            zerolinecolor="#333",
+            tickfont=dict(color="#808080", family="JetBrains Mono", size=9),
+        ),
+        margin=dict(l=10, r=10, t=30, b=10),
+        legend=dict(
+            font=dict(color="#808080", family="JetBrains Mono", size=10),
+            bgcolor="rgba(0,0,0,0)",
+        ),
     )
 
 
@@ -240,9 +286,9 @@ def _hex_to_rgba(c: str, alpha: float = 0.12) -> str:
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("<h1 style='font-size:2rem!important'>F1<br>PREDICTOR</h1>",
-                unsafe_allow_html=True)
-    st.markdown("<div class='accent-line'></div>", unsafe_allow_html=True)
+    st.markdown("<h1>GP-01</h1>", unsafe_allow_html=True)
+    st.markdown("<h3>TACTICAL PREDICTOR</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='height:2px; background:var(--kinetic-cyan); margin:1rem 0 2rem 0; opacity:0.3'></div>", unsafe_allow_html=True)
 
     page = st.radio(
         "Navigation",
@@ -314,13 +360,13 @@ def _round_selector(year: int, key_suffix: str = "") -> int:
 def _prediction_table_html(df: pd.DataFrame) -> str:
     html = (
         "<table style='width:100%;border-collapse:collapse;"
-        "font-family:Space Mono,monospace;font-size:0.78rem'>"
-        "<tr style='color:#444;border-bottom:1px solid #1a1a1a'>"
-        "<th style='text-align:left;padding:6px 4px'>Race</th>"
-        "<th style='text-align:left;padding:6px 4px'>Grid</th>"
-        "<th style='text-align:left;padding:6px 4px'>Driver</th>"
-        "<th style='text-align:left;padding:6px 4px'>Team</th>"
-        "<th style='text-align:right;padding:6px 4px'>Podium%</th></tr>"
+        "font-family:JetBrains Mono,monospace;font-size:0.75rem'>"
+        "<tr style='color:var(--text-muted);border-bottom:1px solid var(--carbon-gray)'>"
+        "<th style='text-align:left;padding:8px 4px;font-size:0.6rem;letter-spacing:0.1em'>RANK</th>"
+        "<th style='text-align:left;padding:8px 4px;font-size:0.6rem;letter-spacing:0.1em'>GRID</th>"
+        "<th style='text-align:left;padding:8px 4px;font-size:0.6rem;letter-spacing:0.1em'>DRIVER</th>"
+        "<th style='text-align:left;padding:8px 4px;font-size:0.6rem;letter-spacing:0.1em'>TEAM</th>"
+        "<th style='text-align:right;padding:8px 4px;font-size:0.6rem;letter-spacing:0.1em'>PODIUM%</th></tr>"
     )
     for _, row in df.iterrows():
         rank    = int(row["PredictedRaceRank"])
@@ -329,20 +375,20 @@ def _prediction_table_html(df: pd.DataFrame) -> str:
         color   = team_colour(row["TeamName"])
         is_top3 = rank <= 3
         rank_style = (
-            "color:#00d4ff;font-family:Bebas Neue,sans-serif;font-size:1.1rem"
+            "color:var(--kinetic-cyan);font-family:Orbitron,sans-serif;font-weight:700;font-size:1.0rem"
             if is_top3
-            else "color:#333;font-family:Bebas Neue,sans-serif;font-size:1.1rem"
+            else "color:var(--text-muted);font-family:Orbitron,sans-serif;font-size:1.0rem"
         )
         html += (
-            f"<tr style='border-bottom:1px solid #111;"
-            f"{'background:#0d1117' if is_top3 else ''}'>"
-            f"<td style='padding:7px 4px;{rank_style}'>P{rank}</td>"
-            f"<td style='padding:7px 4px;color:#444'>P{grid}</td>"
-            f"<td style='padding:7px 4px;color:#ddd'>{row['Driver']}</td>"
-            f"<td style='padding:7px 4px'>"
-            f"<span style='color:{color};font-size:0.72rem'>{row['TeamName']}</span></td>"
-            f"<td style='padding:7px 4px;text-align:right;"
-            f"color:{'#00d4ff' if is_top3 else '#555'}'>{prob:.1f}%</td></tr>"
+            f"<tr style='border-bottom:1px solid var(--border-dim);"
+            f"{'background:rgba(0,242,255,0.03)' if is_top3 else ''}'>"
+            f"<td style='padding:10px 4px;{rank_style}'>P{rank}</td>"
+            f"<td style='padding:10px 4px;color:var(--text-muted)'>P{grid}</td>"
+            f"<td style='padding:10px 4px;color:#fff;font-family:Outfit,sans-serif;font-weight:600'>{row['Driver']}</td>"
+            f"<td style='padding:10px 4px'>"
+            f"<span style='color:{color};font-size:0.65rem;text-transform:uppercase'>{row['TeamName']}</span></td>"
+            f"<td style='padding:10px 4px;text-align:right;"
+            f"color:{'var(--kinetic-cyan)' if is_top3 else 'var(--text-muted)'}'>{prob:.1f}%</td></tr>"
         )
     return html + "</table>"
 
@@ -350,8 +396,9 @@ def _prediction_table_html(df: pd.DataFrame) -> str:
 # ── Page 1: Pre-Race ──────────────────────────────────────────────────────────
 
 if "Pre-Race" in page:
-    st.markdown("<h1>Pre-Race Prediction</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='accent-line'></div>", unsafe_allow_html=True)
+    st.markdown("<h1>P-RACE.26</h1>", unsafe_allow_html=True)
+    st.markdown("<h3>PRE-RACE INTELLIGENCE & PROBABILITY</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 2rem'></div>", unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 3])
     with col1:
@@ -430,8 +477,9 @@ if "Pre-Race" in page:
 # ── Page 2: Post-Race ─────────────────────────────────────────────────────────
 
 elif "Post-Race" in page:
-    st.markdown("<h1>Post-Race Evaluation</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='accent-line'></div>", unsafe_allow_html=True)
+    st.markdown("<h1>POST-RACE</h1>", unsafe_allow_html=True)
+    st.markdown("<h3>RETROSPECTIVE ANALYSIS & MODEL ACCURACY</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 2rem'></div>", unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 3])
     with col1:
@@ -561,8 +609,9 @@ elif "Post-Race" in page:
 # ── Page 3: Season ────────────────────────────────────────────────────────────
 
 elif "Season" in page:
-    st.markdown("<h1>Season Performance</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='accent-line'></div>", unsafe_allow_html=True)
+    st.markdown("<h1>SEASON</h1>", unsafe_allow_html=True)
+    st.markdown("<h3>CHAMPIONSHIP STANDINGS & PROGRESSION</h3>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 2rem'></div>", unsafe_allow_html=True)
 
     history = load_eval_history()
     if not history:
@@ -746,8 +795,10 @@ elif "Season" in page:
 # ── Page 4: Driver Analysis ────────────────────────────────────────────────────
 
 elif "Analysis" in page:
-    st.markdown("<h1>Driver Analysis</h1>", unsafe_allow_html=True)
-    st.markdown("<div class='accent-line'></div>", unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown("<h1>GP-01</h1>", unsafe_allow_html=True)
+        st.markdown("<h3>TACTICAL PREDICTOR</h3>", unsafe_allow_html=True)
+        st.markdown("<div style='height:2px; background:var(--kinetic-cyan); margin:1rem 0 2rem 0; opacity:0.3'></div>", unsafe_allow_html=True)
 
     year_sel  = st.selectbox("Season", [2026, 2025, 2024], index=0,
                              key="analysis_year")
@@ -826,7 +877,7 @@ elif "Analysis" in page:
             categories  = ["Quali pace", "Race pace", "Circuit affinity",
                            "Recent form", "Reliability"]
             fig_radar   = go.Figure()
-            colours_r   = ["#00d4ff", "#ff6b35", "#a855f7", "#22c55e", "#f59e0b"]
+            colours_r   = ["#00F2FF", "#FF2D55", "#FFB800", "#A855F7", "#22C55E"]
 
             for i, driver in enumerate(selected_drivers):
                 vals = [
@@ -853,12 +904,12 @@ elif "Analysis" in page:
                     bgcolor="rgba(0,0,0,0)",
                     radialaxis=dict(
                         visible=True, range=[0, 1],
-                        tickfont=dict(size=9, color="#444"),
-                        gridcolor="#1a1a1a",
+                        tickfont=dict(size=9, color="#555", family="JetBrains Mono"),
+                        gridcolor="#1C1C1E",
                     ),
                     angularaxis=dict(
-                        tickfont=dict(size=11, family="Space Mono", color="#888"),
-                        gridcolor="#1a1a1a",
+                        tickfont=dict(size=11, family="JetBrains Mono", color="#808080"),
+                        gridcolor="#1C1C1E",
                     ),
                 ),
                 paper_bgcolor="rgba(0,0,0,0)",
@@ -956,19 +1007,19 @@ elif "Analysis" in page:
 
             table_html = (
                 "<table style='width:100%;border-collapse:collapse;"
-                "font-family:Space Mono,monospace;font-size:0.78rem'>"
-                f"<tr style='border-bottom:2px solid #1a1a1a'>"
-                f"<th style='text-align:left;padding:8px 6px;color:#444'>Metric</th>"
-                f"<th style='text-align:center;padding:8px 6px;color:#00d4ff'>{driver_a}</th>"
-                f"<th style='text-align:center;padding:8px 6px;color:#ff6b35'>{driver_b}</th>"
+                "font-family:JetBrains Mono,monospace;font-size:0.72rem'>"
+                f"<tr style='border-bottom:2px solid var(--carbon-gray)'>"
+                f"<th style='text-align:left;padding:8px 6px;color:var(--text-muted)'>DATASET</th>"
+                f"<th style='text-align:center;padding:8px 6px;color:var(--kinetic-cyan)'>{driver_a}</th>"
+                f"<th style='text-align:center;padding:8px 6px;color:var(--redline)'>{driver_b}</th>"
                 f"</tr>"
             )
             for key in stats_a:
                 va = stats_a[key]
                 vb = stats_b[key]
                 table_html += (
-                    f"<tr style='border-bottom:1px solid #111'>"
-                    f"<td style='padding:7px 6px;color:#555'>{key}</td>"
+                    f"<tr style='border-bottom:1px solid var(--border-dim)'>"
+                    f"<td style='padding:7px 6px;color:var(--text-muted)'>{key}</td>"
                     f"<td style='padding:7px 6px;text-align:center;color:#ddd'>{va}</td>"
                     f"<td style='padding:7px 6px;text-align:center;color:#ddd'>{vb}</td>"
                     f"</tr>"
@@ -1123,7 +1174,7 @@ elif "Analysis" in page:
                     )
 
                 colours_shap = [
-                    "rgba(0,212,255,0.85)" if v > 0 else "rgba(255,107,53,0.85)"
+                    "rgba(0,242,255,0.85)" if v > 0 else "rgba(255,45,85,0.85)"
                     for v in shap_df["shap"]
                 ]
                 fig_shap = go.Figure()

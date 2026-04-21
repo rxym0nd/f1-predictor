@@ -28,7 +28,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-import fastf1
+import fastf1  # type: ignore
 import pandas as pd
 import requests
 
@@ -128,7 +128,7 @@ def fetch_race_weekend_forecast(
     OpenMeteo provides free forecasts up to 16 days ahead.
     """
     # Build a ±3-hour window around session start
-    params = {
+    params: dict[str, str | float | int] = {
         "latitude":          lat,
         "longitude":         lon,
         "hourly":            "temperature_2m,relativehumidity_2m,precipitation_probability,precipitation",

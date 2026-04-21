@@ -33,15 +33,15 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import fastf1
-from fastf1.exceptions import RateLimitExceededError
+import fastf1  # type: ignore
+from fastf1.exceptions import RateLimitExceededError  # type: ignore
 import pandas as pd
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 CACHE_DIR          = Path("cache")
 RAW_DIR            = Path("data/raw")
-HISTORICAL_SEASONS = list(range(2018, 2026))   # 2018–2025 inclusive
+HISTORICAL_SEASONS = [2024, 2025]              # Faster run: only last 2 years + current
 CURRENT_SEASON     = 2026
 
 REQUIRED_SESSIONS = ["Q", "R"]
@@ -331,14 +331,20 @@ def ingest_all():
 
     for year in HISTORICAL_SEASONS:
         s, sk, f, fp = ingest_season(year, current_season=False)
-        ts += s; ts_sk += sk; tf += f; tfp += fp
+        ts += s
+        ts_sk += sk
+        tf += f
+        tfp += fp
 
     log.info(
         "── %d  (current season — per-session date checking) ──",
         CURRENT_SEASON,
     )
     s, sk, f, fp = ingest_season(CURRENT_SEASON, current_season=True)
-    ts += s; ts_sk += sk; tf += f; tfp += fp
+    ts += s
+    ts_sk += sk
+    tf += f
+    tfp += fp
 
     log.info(
         "Done. Saved: %d  |  Skipped: %d  |  Failed (Q/R): %d  |  "

@@ -19,14 +19,14 @@ import json
 import logging
 from pathlib import Path
 
-import joblib
+import joblib  # type: ignore
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
-from sklearn.isotonic import IsotonicRegression
-from sklearn.metrics import brier_score_loss
-from sklearn.preprocessing import LabelEncoder
-import xgboost as xgb
+from sklearn.isotonic import IsotonicRegression  # type: ignore
+from sklearn.metrics import brier_score_loss  # type: ignore
+from sklearn.preprocessing import LabelEncoder  # type: ignore
+import xgboost as xgb  # type: ignore
 
 from config import QUALI_FEATURES, RACE_FEATURES
 

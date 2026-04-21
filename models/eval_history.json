@@ -853,17 +853,17 @@
     "key": "2026_R03",
     "year": 2026,
     "round": 3,
-    "event": "Chinese Grand Prix",
-    "circuit": "Shanghai",
+    "event": "Japanese Grand Prix",
+    "circuit": "Suzuka",
     "quali": {
-      "MAE_positions": null,
-      "Spearman_rho": null
+      "MAE_positions": 5.9091,
+      "Spearman_rho": 0.1621
     },
     "race": {
-      "Brier_score": null,
-      "Top3_overlap": null
+      "Brier_score": 0.1263,
+      "Top3_overlap": 0
     },
-    "chaos": false,
-    "chaos_reason": ""
+    "chaos": true,
+    "chaos_reason": "SC/VSC/red flag for 24% of session time; Spearman \u03c1=0.162 below chaos threshold"
   }
 ]
