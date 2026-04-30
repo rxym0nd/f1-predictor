@@ -10,3 +10,4 @@ streamlit>=1.39.0
 requests>=2.32.3
 shap>=0.46.0
 pyarrow>=18.0.0
+optuna>=3.0.0

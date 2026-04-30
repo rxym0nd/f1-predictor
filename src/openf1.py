@@ -81,8 +81,13 @@ def _get(endpoint: str, params: dict) -> list | None:
     return None
 
 
+_SESSION_KEY_CACHE: dict[tuple[int, int], int] = {}
+
 def get_session_key(year: int, round_number: int) -> int | None:
     """Return the OpenF1 session_key for a qualifying session."""
+    if (year, round_number) in _SESSION_KEY_CACHE:
+        return _SESSION_KEY_CACHE[(year, round_number)]
+
     fastf1.Cache.enable_cache(str(CACHE_DIR))
     try:
         sched = fastf1.get_event_schedule(year, include_testing=False)
@@ -119,7 +124,10 @@ def get_session_key(year: int, round_number: int) -> int | None:
         return None
 
     # If multiple matches, take the one closest to the round number
-    return records[0].get("session_key")
+    key = records[0].get("session_key")
+    if key:
+        _SESSION_KEY_CACHE[(year, round_number)] = key
+    return key
 
 
 def fetch_openf1_sectors(session_key: int) -> pd.DataFrame:

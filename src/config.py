@@ -7,11 +7,20 @@ Single source of truth for constants shared across the pipeline.
 ROLLING_WINDOW: int = 5
 
 REGULATION_CHANGE_YEARS: list[int] = [2017, 2022, 2026]
+REGULATION_ERA_DECAY = 0.70
 
 
 def years_since_reg_change(year: int) -> int:
     past = [y for y in REGULATION_CHANGE_YEARS if y <= year]
     return year - max(past) if past else year - REGULATION_CHANGE_YEARS[0]
+
+
+def get_era_weight(train_year: int, max_year: int, base_decay: float) -> float:
+    weight = base_decay ** (max_year - train_year)
+    for reg_year in REGULATION_CHANGE_YEARS:
+        if train_year < reg_year <= max_year:
+            weight *= REGULATION_ERA_DECAY
+    return float(weight)
 
 
 TEAM_NAME_MAP: dict[str, str] = {
@@ -48,7 +57,6 @@ CIRCUIT_OVERTAKING_DIFFICULTY: dict[str, float] = {
     "Zandvoort": 1.3, "Baku": 0.7, "Monza": 0.6,
     "Spa-Francorchamps": 0.8,
 }
-_DEFAULT_OVERTAKING_DIFFICULTY = 1.0
 
 COMPOUND_ORDER: dict[str, int] = {
     "SOFT": 1, "MEDIUM": 2, "HARD": 3,
@@ -111,12 +119,14 @@ def circuit_type_flags(circuit_name: str) -> dict[str, int]:
 
 def grid_difficulty_score(quali_pos: float, circuit_name: str) -> float:
     difficulty = CIRCUIT_OVERTAKING_DIFFICULTY.get(
-        str(circuit_name), _DEFAULT_OVERTAKING_DIFFICULTY
+        str(circuit_name), 1.0
     )
     return float(quali_pos) * difficulty
 
 
 # ── Feature lists ──────────────────────────────────────────────────────────────
+
+FP_MISSING_INDICATOR_FEATURES: list[str] = ["FP3_missing", "FP2_missing"]
 
 QUALI_FEATURES: list[str] = [
     "Driver_enc", "TeamName_enc", "CircuitShortName_enc",
@@ -132,11 +142,11 @@ QUALI_FEATURES: list[str] = [
     "ConRollingQualiGap",
     "CircuitAvgQualiGap", "CircuitAvgQualiPos", "CircuitVisits",
     "H2H_QualiWinRate",
-    "S1Gap_s", "S2Gap_s", "S3Gap_s",
-    "RollingS1Gap", "RollingS2Gap", "RollingS3Gap",
-    "SpeedTrap_kph", "RollingSpeedTrap",
+    "DriverElo", "TeamElo", "EloGap",
+    *FP_MISSING_INDICATOR_FEATURES,
     "FP3_BestLap_s", "FP3_GapToFastest_s", "FP3_PaceRank",
     "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+    "FP2_Degradation_s_per_lap",
     "RollingAvgFinish", "RollingAvgGrid", "RollingPoints",
     "RollingPodiumRate", "RollingDNFRate", "DNFStreak",
     "ConRollingAvgFinish", "ConRollingPoints",
@@ -166,7 +176,10 @@ RACE_FEATURES: list[str] = [
     "CircuitAvgQualiGap", "CircuitAvgQualiPos", "CircuitVisits",
     "H2H_QualiWinRate",
     "RollingS1Gap", "RollingS2Gap", "RollingS3Gap", "RollingSpeedTrap",
+    "DriverElo", "TeamElo", "EloGap",
+    *FP_MISSING_INDICATOR_FEATURES,
     "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+    "FP2_Degradation_s_per_lap",
     # Tyre compound + degradation (items #3 + #8)
     "StartCompound_enc",
     "StartTyreLife",

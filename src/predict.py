@@ -60,6 +60,14 @@ from config import (
 
 # Import FP extraction functions from features.py so logic stays in sync
 from features import extract_fp2_longruns, extract_fp3_pace
+from train import apply_impute_stats
+
+try:
+    from news import get_grid_penalties as _get_grid_penalties
+    _NEWS_AVAILABLE = True
+except ImportError:
+    _get_grid_penalties = None  # type: ignore
+    _NEWS_AVAILABLE = False
 
 try:
     from weather import get_forecast_for_round as _get_weather_forecast
@@ -84,8 +92,8 @@ PREDICTIONS_DIR = Path("predictions")
 # Maximum age of raw data files before a staleness warning is raised.
 _STALE_DATA_DAYS = 8
 
-# Long-run threshold must match features.py
-_LONG_RUN_THRESHOLD = 1.07
+
+
 
 
 def _check_stale_data():
@@ -468,6 +476,8 @@ def build_prediction_features(
         "ConChampDelta", "ConChampPos",
         "CareerRaceCount",
         "CircuitSCRate",
+        "DriverElo", "TeamElo", "EloGap",
+        "FP3_missing", "FP2_missing",
         # FP features — will be overwritten from fp_features dict if available
         "FP3_BestLap_s", "FP3_GapToFastest_s", "FP3_PaceRank",
         "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
@@ -486,6 +496,16 @@ def build_prediction_features(
         (hist_race["Year"] < year) |
         ((hist_race["Year"] == year) & (hist_race["RoundNumber"] < round_number))
     ].copy()
+
+    # ── Bayesian Elo Ratings ──────────────────────────────────────────────────
+    from elo import get_current_elo
+    _elo_race = prior_race.copy()
+    _elo_race["FinishPos"] = pd.to_numeric(_elo_race.get("Position", np.nan), errors="coerce")
+    _elo_race["Status"] = _elo_race.get("Status", pd.Series(["Finished"] * len(_elo_race)))
+    _elo_race["DNF"] = _elo_race["Status"].apply(
+        lambda s: 0 if str(s).startswith("Finished") or str(s).startswith("+") else 1
+    )
+    driver_elo, team_elo = get_current_elo(_elo_race)
 
     # ── Regulation cold-start ─────────────────────────────────────────────────
     # rolling_quali / rolling_race: used for ALL rolling driver/constructor form.
@@ -559,7 +579,7 @@ def build_prediction_features(
 
     # ── 3. Circuit affinity (full history — circuit layout unchanged by regs) ──
     for driver in df["Driver"]:
-        mask   = df["Driver"] == driver
+        mask = df["Driver"] == driver
         c_hist = prior_quali[
             (prior_quali["Driver"] == driver) &
             (prior_quali["CircuitShortName"] == circuit)
@@ -704,12 +724,17 @@ def build_prediction_features(
         df.loc[mask, "ConChampDelta"] = max(0.0, max_con_pts - team_pts_val)
         df.loc[mask, "ConChampPos"]   = float(team_pos_map.get(team, len(df["TeamName"].unique())))
 
-    # ── 9. Career race count (FIX: was never computed, rookies looked like vets) ──
+    # ── 9. Career race count & Elo (FIX: was never computed, rookies looked like vets) ──
     # Count races completed by each driver prior to this round across all history.
     for driver in df["Driver"]:
         mask = df["Driver"] == driver
         count = len(prior_race[prior_race["Driver"] == driver])
         df.loc[mask, "CareerRaceCount"] = float(count)
+        df.loc[mask, "DriverElo"] = driver_elo.get(driver, 1500.0)
+    
+    for team in df["TeamName"]:
+        mask = df["TeamName"] == team
+        df.loc[mask, "TeamElo"] = team_elo.get(team, 1500.0)
 
     # ── 10. Circuit SC rate (FIX: was never computed, always imputed to median) ──
     # Look up from KNOWN_SC_RATES — same source used in features.py.
@@ -787,12 +812,26 @@ def build_prediction_features(
     fp_cols = [
         "FP3_BestLap_s", "FP3_GapToFastest_s", "FP3_PaceRank",
         "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+        "FP2_Degradation_s_per_lap",
     ]
+    df["FP3_missing"] = df["FP3_missing"].fillna(1.0)
+    df["FP2_missing"] = df["FP2_missing"].fillna(1.0)
+    
+    df["EloGap"] = df["TeamElo"] - df["DriverElo"]
+
+    # Global median imputation only kicks in if prior_* sets were empty
+    # For a real run, this almost never happens, but prevents breaking.
     for driver in df["Driver"]:
         if driver not in fp_features:
             continue
         driver_fp = fp_features[driver]
         mask = df["Driver"] == driver
+        
+        if "FP3_BestLap_s" in driver_fp and not pd.isna(driver_fp["FP3_BestLap_s"]):
+            df.loc[mask, "FP3_missing"] = 0
+        if "FP2_LongRunPace_s" in driver_fp and not pd.isna(driver_fp["FP2_LongRunPace_s"]):
+            df.loc[mask, "FP2_missing"] = 0
+            
         for col in fp_cols:
             if col in driver_fp:
                 df.loc[mask, col] = driver_fp[col]
@@ -822,33 +861,7 @@ def encode_for_prediction(df: pd.DataFrame, encoders: dict) -> pd.DataFrame:
     return df
 
 
-def impute_prediction_features(
-    df: pd.DataFrame,
-    feature_cols: list,
-    fallback_stats: dict[str, float],
-    hist_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Fill NaNs using train-set medians (from metrics JSON) with a fallback
-    to current-data medians. Creates missing columns rather than crashing.
-    """
-    df = df.copy()
-    for col in feature_cols:
-        if col not in df.columns:
-            median = fallback_stats.get(
-                col,
-                pd.to_numeric(hist_df[col], errors="coerce").median()
-                if col in hist_df.columns else 0.0,
-            )
-            df[col] = median
-        elif df[col].isnull().any():
-            median = fallback_stats.get(
-                col,
-                pd.to_numeric(hist_df[col], errors="coerce").median()
-                if col in hist_df.columns else 0.0,
-            )
-            df[col] = df[col].fillna(median)
-    return df
+
 
 
 # ── Main prediction pipeline ──────────────────────────────────────────────────
@@ -891,7 +904,8 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
 
     # ── Stage 1: Quali grid ───────────────────────────────────────────────────
     df_q = encode_for_prediction(df, q_encoders)
-    df_q = impute_prediction_features(df_q, QUALI_FEATURES, q_stats, hist_quali)
+    q_stats = load_impute_stats("quali_model")
+    df_q = apply_impute_stats(df_q, q_stats, QUALI_FEATURES)
 
     X_q = df_q[QUALI_FEATURES].copy().reset_index(drop=True)
     q_scores = q_model.predict(X_q, validate_features=False)
@@ -913,6 +927,32 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
         log.info("  P%-2d  %-4s  %s",
                  row["PredictedQualiPos"], row["Driver"], row["TeamName"])
 
+    # ── Apply grid penalties (from news.py or manual entries) ─────────────
+    if _NEWS_AVAILABLE:
+        penalties = _get_grid_penalties(year, round_number)
+        if penalties:
+            log.info("Applying %d grid penalties", len(penalties))
+            for driver_abbr, places in penalties.items():
+                mask = df["Driver"] == driver_abbr
+                if mask.any():
+                    old_pos = int(df.loc[mask, "PredictedQualiPos"].iloc[0])
+                    new_pos = min(old_pos + places, len(df))
+                    df.loc[mask, "PredictedQualiPos"] = new_pos
+                    df.loc[mask, "GridPenaltyPlaces"] = float(places)
+                    log.info(
+                        "  %s: P%d → P%d (%d-place penalty)",
+                        driver_abbr, old_pos, new_pos, places,
+                    )
+            # Re-rank to fill gaps after penalty shifts
+            df["PredictedQualiPos"] = (
+                df["PredictedQualiPos"]
+                .rank(method="first")
+                .astype(int)
+            )
+            df["PredictedGapToPole_s"] = (df["PredictedQualiPos"] - 1) * 0.10
+    else:
+        log.debug("News module not available — skipping grid penalty check")
+
     # ── Stage 2: Race podium ──────────────────────────────────────────────────
     df["QualiPos"]    = df["PredictedQualiPos"]
     df["GapToPole_s"] = df["PredictedGapToPole_s"]
@@ -933,7 +973,8 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
     )
 
     df_r = encode_for_prediction(df, r_encoders)
-    df_r = impute_prediction_features(df_r, RACE_FEATURES, r_stats, hist_race)
+    r_stats = load_impute_stats("race_model")
+    df_r = apply_impute_stats(df_r, r_stats, RACE_FEATURES)
 
     X_r = df_r[RACE_FEATURES].copy().reset_index(drop=True)
     raw_probs = r_model.predict_proba(X_r, validate_features=False)[:, 1]
@@ -950,9 +991,14 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
     )
 
     # ── Output ────────────────────────────────────────────────────────────────
+    out_cols = ["Driver", "TeamName", "PredictedQualiPos",
+                "PodiumProbability", "PodiumProbability_norm"]
+    # Include Elo columns if they exist
+    for elo_col in ["DriverElo", "TeamElo"]:
+        if elo_col in df.columns:
+            out_cols.append(elo_col)
     output = (
-        df[["Driver", "TeamName", "PredictedQualiPos",
-            "PodiumProbability", "PodiumProbability_norm"]]
+        df[out_cols]
         .copy()
         .sort_values("PodiumProbability", ascending=False)
         .reset_index(drop=True)
@@ -981,11 +1027,7 @@ def predict(year: int, round_number: int) -> pd.DataFrame:
             "round":   round_number,
             "event":   entry["EventName"].iloc[0],
             "circuit": entry["CircuitShortName"].iloc[0],
-            "predictions": output[[
-                "Driver", "TeamName",
-                "PredictedQualiPos", "PredictedRaceRank",
-                "PodiumProbability", "PodiumProbability_norm",
-            ]].to_dict(orient="records"),
+            "predictions": output.to_dict(orient="records"),
         }, f, indent=2)
     log.info("Saved → %s", out_path)
 

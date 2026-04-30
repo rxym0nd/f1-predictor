@@ -49,6 +49,7 @@ CIRCUIT_COORDS: dict[str, tuple[float, float]] = {
     "Sakhir":        ( 26.0325,   50.5106),
     "Jeddah":        ( 21.6319,   39.1044),
     "Miami":         ( 25.9581,  -80.2389),
+    "Miami Gardens": ( 25.9581,  -80.2389),
     "Imola":         ( 44.3439,   11.7167),
     "Monaco":        ( 43.7347,    7.4206),
     "Barcelona":     ( 41.5700,    2.2611),

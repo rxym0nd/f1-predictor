@@ -138,14 +138,18 @@ def fetch_session(
     round_number: int,
     session_type: str,
     optional: bool = False,
+    max_retries: int = 3,
 ) -> dict | None:
     """
     Load a single session and return a dict of DataFrames.
     Returns None on failure.
     Optional sessions suppress FastF1 noise and treat missing data as a
     soft skip rather than a failure.
+    Uses exponential backoff with jitter for transient errors.
     """
-    for attempt in range(2):
+    import random
+
+    for attempt in range(max_retries):
         if optional:
             ff1_logger, orig_level = _silence_fastf1()
 
@@ -187,13 +191,34 @@ def fetch_session(
         except RateLimitExceededError:
             if optional:
                 _restore_fastf1(ff1_logger, orig_level)
-            if attempt == 0:
-                log.warning("Rate limit hit — sleeping 65 minutes...")
-                time.sleep(65 * 60)
+            if attempt < max_retries - 1:
+                wait = min(65 * 60, (2 ** attempt) * 60 + random.uniform(0, 30))
+                log.warning(
+                    "Rate limit hit (attempt %d/%d) — sleeping %.0fs...",
+                    attempt + 1, max_retries, wait,
+                )
+                time.sleep(wait)
             else:
                 log.warning(
-                    "Rate limit again — skipping %d R%d %s",
+                    "Rate limit persists — skipping %d R%d %s",
                     year, round_number, session_type,
+                )
+                return None
+
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            if optional:
+                _restore_fastf1(ff1_logger, orig_level)
+            if attempt < max_retries - 1:
+                wait = (2 ** attempt) * 5 + random.uniform(0, 3)
+                log.warning(
+                    "Network error %d R%d %s (attempt %d/%d): %s — retrying in %.0fs",
+                    year, round_number, session_type, attempt + 1, max_retries, exc, wait,
+                )
+                time.sleep(wait)
+            else:
+                log.error(
+                    "Network error persists for %d R%d %s after %d attempts: %s",
+                    year, round_number, session_type, max_retries, exc,
                 )
                 return None
 

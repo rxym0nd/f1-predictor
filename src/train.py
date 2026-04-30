@@ -15,8 +15,10 @@ Run from f1-predictor root:
     python src/train.py
 """
 
+import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 
 import joblib  # type: ignore
@@ -28,7 +30,7 @@ from sklearn.metrics import brier_score_loss  # type: ignore
 from sklearn.preprocessing import LabelEncoder  # type: ignore
 import xgboost as xgb  # type: ignore
 
-from config import QUALI_FEATURES, RACE_FEATURES
+from config import QUALI_FEATURES, RACE_FEATURES, get_era_weight
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +42,7 @@ log = logging.getLogger(__name__)
 PROCESSED_DIR = Path("data/processed")
 MODELS_DIR    = Path("models")
 
-TEST_YEAR    = 2025
+TEST_YEAR    = 2026
 QUALI_TARGET = "QualiPos"
 RACE_TARGET  = "Podium"
 
@@ -53,19 +55,12 @@ YEAR_WEIGHT_DECAY = 0.92
 
 def compute_sample_weights(years: pd.Series) -> np.ndarray:
     """
-    Assign each row a weight based on how recent its season is.
-    Rows from the most recent year get weight 1.0; each year back
-    gets multiplied by YEAR_WEIGHT_DECAY.
-
-    Example (decay=0.80, most recent year=2024):
-      2024 → 1.00
-      2023 → 0.80
-      2022 → 0.64
-      2021 → 0.51
-      2018 → 0.26
+    Assign each row a weight based on how recent its season is,
+    plus era decay for regulation changes.
     """
     max_year = int(years.max())
-    return np.power(YEAR_WEIGHT_DECAY, max_year - years.values).astype(float)
+    weights = [get_era_weight(int(y), max_year, YEAR_WEIGHT_DECAY) for y in years]
+    return np.array(weights, dtype=float)
 
 
 # ── Preprocessing ─────────────────────────────────────────────────────────────
@@ -97,30 +92,84 @@ def time_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return train, test
 
 
-def compute_impute_stats(train_df: pd.DataFrame, feature_cols: list) -> dict[str, float]:
-    """Median of each feature column, computed on TRAINING DATA ONLY."""
-    return {
-        col: float(train_df[col].median())
-        for col in feature_cols
-        if col in train_df.columns
-    }
+def compute_impute_stats(train_df: pd.DataFrame, feature_cols: list) -> dict:
+    """Compute hierarchical medians (circuit, team, global) from TRAINING DATA ONLY."""
+    stats = {"global": {}, "team": {}, "circuit": {}}
+    
+    for col in feature_cols:
+        if col in train_df.columns:
+            stats["global"][col] = float(train_df[col].median())
+            
+    if "TeamName_enc" in train_df.columns:
+        for team, grp in train_df.groupby("TeamName_enc"):
+            stats["team"][str(team)] = {}
+            for col in feature_cols:
+                if col in grp.columns:
+                    val = grp[col].median()
+                    if pd.notna(val):
+                        stats["team"][str(team)][col] = float(val)
+
+    if "CircuitShortName_enc" in train_df.columns:
+        for circ, grp in train_df.groupby("CircuitShortName_enc"):
+            stats["circuit"][str(circ)] = {}
+            for col in feature_cols:
+                if col in grp.columns:
+                    val = grp[col].median()
+                    if pd.notna(val):
+                        stats["circuit"][str(circ)][col] = float(val)
+
+    return stats
 
 
 def apply_impute_stats(
     df: pd.DataFrame,
-    stats: dict[str, float],
-    feature_cols: list,
+    stats: dict,
+    features: list,
 ) -> pd.DataFrame:
-    """Fill nulls using pre-computed (train-only) medians."""
+    """Fill nulls using hierarchical pre-computed medians."""
     df = df.copy()
-    for col in feature_cols:
-        if col not in stats:
-            continue
-        median = stats[col]
+    
+    # 0. Ensure all columns exist
+    global_stats = stats.get("global", {})
+    for col in features:
         if col not in df.columns:
-            df[col] = median
-        elif df[col].isnull().any():
-            df[col] = df[col].fillna(median)
+            df[col] = global_stats.get(col, 0.0)
+
+    # 0b. Cast feature columns to float64 to prevent FutureWarning when
+    # filling int64 columns with float medians (e.g. QualiPos median = 10.5).
+    for col in features:
+        if col in df.columns:
+            df[col] = df[col].astype("float64")
+
+    # 1. Global fallback
+    for col in features:
+        df[col] = df[col].fillna(global_stats.get(col, 0.0))
+
+    # Team fallback
+    if "TeamName_enc" in df.columns and "team" in stats:
+        team_stats = stats["team"]
+        for team_str, team_col_stats in team_stats.items():
+            team_id = int(team_str)
+            mask = (df["TeamName_enc"] == team_id)
+            for col, val in team_col_stats.items():
+                if col in df.columns:
+                    df.loc[mask & df[col].isnull(), col] = val
+
+    # Circuit fallback
+    if "CircuitShortName_enc" in df.columns and "circuit" in stats:
+        circuit_stats = stats["circuit"]
+        for circ_str, circ_col_stats in circuit_stats.items():
+            circ_id = int(circ_str)
+            mask = (df["CircuitShortName_enc"] == circ_id)
+            for col, val in circ_col_stats.items():
+                if col in df.columns:
+                    df.loc[mask & df[col].isnull(), col] = val
+                    
+    # Last resort (unobserved categories or columns with no median)
+    for col in features:
+        if col in df.columns and df[col].isnull().any():
+            df[col] = df[col].fillna(0.0)
+            
     return df
 
 
@@ -261,20 +310,22 @@ def train_quali_model(
     train_groups = train_sorted.groupby(["Year", "RoundNumber"]).size().values
     test_groups  = test_sorted.groupby(["Year", "RoundNumber"]).size().values
 
-    model = xgb.XGBRanker(
-        objective="rank:pairwise",
-        n_estimators=600,
-        learning_rate=0.04,
-        max_depth=6,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
-        random_state=42,
-        n_jobs=-1,
-        early_stopping_rounds=40,
-        eval_metric="ndcg",
-    )
+    base_params = {
+        "objective": "rank:pairwise",
+        "n_estimators": 600,
+        "learning_rate": 0.04,
+        "max_depth": 6,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.1,
+        "reg_lambda": 1.0,
+        "random_state": 42,
+        "n_jobs": -1,
+        "early_stopping_rounds": 40,
+        "eval_metric": "ndcg",
+    }
+    base_params.update(load_best_params("quali"))
+    model = xgb.XGBRanker(**base_params)
     model.fit(
         X_train_sorted, y_train_sorted,
         group=train_groups,
@@ -351,20 +402,23 @@ def train_race_model(
 
     sample_weight = compute_sample_weights(train["Year"])
 
-    base_model = xgb.XGBClassifier(
-        n_estimators=600,
-        learning_rate=0.04,
-        max_depth=5,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
-        scale_pos_weight=scale_pos_weight,
-        eval_metric="logloss",
-        random_state=42,
-        n_jobs=-1,
-        early_stopping_rounds=40,
-    )
+    base_params = {
+        "objective": "binary:logistic",
+        "n_estimators": 600,
+        "learning_rate": 0.04,
+        "max_depth": 5,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "reg_alpha": 0.1,
+        "reg_lambda": 1.0,
+        "scale_pos_weight": scale_pos_weight,
+        "eval_metric": "logloss",
+        "random_state": 42,
+        "n_jobs": -1,
+        "early_stopping_rounds": 40,
+    }
+    base_params.update(load_best_params("race"))
+    base_model = xgb.XGBClassifier(**base_params)
     base_model.fit(
         X_train, y_train,
         sample_weight=sample_weight,
@@ -410,6 +464,17 @@ def train_race_model(
     metrics["impute_stats"] = impute_stats
 
     return iso_calibrator, base_model, metrics
+
+
+def load_best_params(name: str) -> dict:
+    """Load optimized hyperparameters if available."""
+    path = MODELS_DIR / f"{name}_params.json"
+    if path.exists():
+        with open(path) as f:
+            params = json.load(f)
+        log.info("Loaded optimized params for %s", name)
+        return params
+    return {}
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
@@ -503,6 +568,21 @@ def _should_rollback(model_name: str, new_metrics: dict) -> bool:
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tune", action="store_true", help="Run hyperparameter tuning before training")
+    parser.add_argument("--trials", type=int, default=50, help="Number of tuning trials")
+    args = parser.parse_args()
+
+    if args.tune:
+        log.info("Starting automated hyperparameter tuning...")
+        import subprocess
+        tune_cmd = [sys.executable, "src/tune.py", "--trials", str(args.trials)]
+        res = subprocess.run(tune_cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            log.error("Tuning failed:\n%s", res.stderr)
+        else:
+            log.info("Tuning complete.")
+
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     # ── Stage 1: Quali regressor ──────────────────────────────────────────────

@@ -202,6 +202,15 @@ def load_prediction(year: int, round_number: int) -> dict | None:
         return json.load(f)
 
 
+@st.cache_data(ttl=300)
+def load_simulation(year: int, round_number: int) -> dict | None:
+    path = PREDICTIONS_DIR / f"{year}_R{round_number:02d}_simulations.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
 @st.cache_data(ttl=3600)
 def get_season_schedule(year: int) -> pd.DataFrame | None:
     try:
@@ -325,7 +334,9 @@ with st.sidebar:
         )
     else:
         st.markdown("<div class='tag'>Retrain models</div>", unsafe_allow_html=True)
-        if st.button("Run features + train"):
+        confirm = st.checkbox("I want to retrain (takes ~60s)", key="retrain_confirm")
+        retrain_btn = st.button("Run features + train", disabled=not confirm)
+        if retrain_btn and confirm:
             with st.spinner("Running features.py..."):
                 ok1, _, err1 = run_script("features.py", [])
             with st.spinner("Running train.py..."):
@@ -342,6 +353,69 @@ with st.sidebar:
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
+
+
+def _model_confidence_banner(year: int) -> None:
+    """Show a context-aware banner about model confidence for the selected season."""
+    from config import REGULATION_CHANGE_YEARS, years_since_reg_change
+    yrs = years_since_reg_change(year)
+    # Load model metrics for Brier reference
+    race_metrics_path = MODELS_DIR / "race_model_metrics.json"
+    brier = None
+    if race_metrics_path.exists():
+        with open(race_metrics_path) as f:
+            brier = json.load(f).get("Brier_score")
+
+    if yrs == 0:
+        st.markdown(
+            "<div style='background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.25);"
+            "border-left:3px solid #FFB800;padding:0.7rem 1rem;font-family:JetBrains Mono,monospace;"
+            "font-size:0.7rem;color:#FFB800;margin-bottom:1rem'>"
+            f"⚠️ REGULATION CHANGE YEAR — {year} is Year 0 of a new era. "
+            "Model relies heavily on FP2/FP3 data and Elo ratings. "
+            "Rolling features are era-scoped. Confidence improves each round."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    elif yrs == 1:
+        st.markdown(
+            "<div style='background:rgba(0,242,255,0.05);border:1px solid rgba(0,242,255,0.15);"
+            "border-left:3px solid var(--kinetic-cyan);padding:0.7rem 1rem;font-family:JetBrains Mono,monospace;"
+            "font-size:0.7rem;color:#00F2FF;margin-bottom:1rem'>"
+            f"📡 YEAR 1 STABLE ERA — Model has 1 full season of same-regulation data. "
+            f"{'Brier: ' + f'{brier:.4f}' if brier else ''} "
+            "Predictions are calibrated but still building history."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div style='background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.15);"
+            "border-left:3px solid #22C55E;padding:0.7rem 1rem;font-family:JetBrains Mono,monospace;"
+            "font-size:0.7rem;color:#22C55E;margin-bottom:1rem'>"
+            f"✅ MATURE ERA (Year {yrs}) — Rich historical data available. "
+            f"{'Brier: ' + f'{brier:.4f}' if brier else ''} "
+            "Model confidence is high."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+
+@st.cache_data(ttl=600)
+def _load_elo_data():
+    """Load Elo ratings from the latest prediction files."""
+    elo_data = []
+    if PREDICTIONS_DIR.exists():
+        for p in sorted(PREDICTIONS_DIR.glob("*_prediction.json"), reverse=True):
+            with open(p) as f:
+                pred = json.load(f)
+            for row in pred.get("predictions", []):
+                if "DriverElo" in row:
+                    elo_data.append(row)
+            if elo_data:
+                break  # Use most recent prediction only
+    return elo_data
+
 
 def _round_selector(year: int, key_suffix: str = "") -> int:
     schedule = get_season_schedule(year)
@@ -398,7 +472,7 @@ def _prediction_table_html(df: pd.DataFrame) -> str:
 if "Pre-Race" in page:
     st.markdown("<h1>P-RACE.26</h1>", unsafe_allow_html=True)
     st.markdown("<h3>PRE-RACE INTELLIGENCE & PROBABILITY</h3>", unsafe_allow_html=True)
-    st.markdown("<div style='margin-bottom: 2rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 1rem'></div>", unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 3])
     with col1:
@@ -472,6 +546,255 @@ if "Pre-Race" in page:
 
             st.markdown("### Full Grid Prediction")
             st.markdown(_prediction_table_html(df), unsafe_allow_html=True)
+
+            # ── Elo Power Rankings ──
+            if "DriverElo" in df.columns:
+                st.markdown("---")
+                st.markdown("### Elo Power Rankings")
+                st.markdown(
+                    "<div class='tag'>Bayesian Elo ratings entering this race — "
+                    "higher = stronger recent form</div><br>",
+                    unsafe_allow_html=True,
+                )
+                elo_df = df.sort_values("DriverElo", ascending=False).head(10)
+                fig_elo = go.Figure()
+                for _, row in elo_df.iterrows():
+                    fig_elo.add_trace(go.Bar(
+                        x=[row["DriverElo"] - 1400],  # offset for visual
+                        y=[row["Driver"]],
+                        orientation="h",
+                        marker_color=team_colour(row["TeamName"]),
+                        showlegend=False,
+                        text=f"{row['DriverElo']:.0f}",
+                        textposition="outside",
+                        textfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                    ))
+                elo_layout = _plotly_layout(320)
+                elo_layout["xaxis"] = dict(
+                    showgrid=False, showticklabels=False,
+                    range=[0, max(elo_df["DriverElo"].max() - 1380, 200)],
+                )
+                elo_layout["yaxis"] = dict(
+                    autorange="reversed",
+                    tickfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                    gridcolor="#111",
+                )
+                fig_elo.update_layout(**elo_layout)
+                st.plotly_chart(fig_elo, use_container_width=True)
+
+                if "TeamElo" in df.columns:
+                    team_elo = (
+                        df.groupby("TeamName")["TeamElo"]
+                        .first()
+                        .sort_values(ascending=False)
+                        .reset_index()
+                    )
+                    fig_team = go.Figure()
+                    for _, row in team_elo.iterrows():
+                        fig_team.add_trace(go.Bar(
+                            x=[row["TeamElo"] - 1400],
+                            y=[row["TeamName"]],
+                            orientation="h",
+                            marker_color=team_colour(row["TeamName"]),
+                            showlegend=False,
+                            text=f"{row['TeamElo']:.0f}",
+                            textposition="outside",
+                            textfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                        ))
+                    team_layout = _plotly_layout(260)
+                    team_layout["xaxis"] = dict(
+                        showgrid=False, showticklabels=False,
+                        range=[0, max(team_elo["TeamElo"].max() - 1380, 200)],
+                    )
+                    team_layout["yaxis"] = dict(
+                        autorange="reversed",
+                        tickfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                        gridcolor="#111",
+                    )
+                    fig_team.update_layout(**team_layout)
+                    st.markdown("### Constructor Elo")
+                    st.plotly_chart(fig_team, use_container_width=True)
+
+            # ── Monte Carlo Simulation Section ──────────────────────────────
+            sim = load_simulation(year, round_number)
+            if sim is not None:
+                st.markdown("---")
+                st.markdown("## Monte Carlo Simulation")
+                st.markdown(
+                    f"<div class='tag'>{sim.get('num_simulations', 10000):,} iterations "
+                    f"· {sim.get('circuit', '')} · probabilistic race outcomes</div><br>",
+                    unsafe_allow_html=True,
+                )
+
+                sim_df = pd.DataFrame(sim["results"])
+
+                # ── Win / Podium / Points probability bars ──
+                top10 = sim_df.head(10)
+                st.markdown("### Win · Podium · Points Probability")
+                fig_mc = go.Figure()
+                fig_mc.add_trace(go.Bar(
+                    y=top10["Driver"], x=top10["SimPointsProb"].apply(lambda v: v * 100),
+                    orientation="h", name="Points",
+                    marker_color="rgba(255,255,255,0.08)",
+                    showlegend=True,
+                ))
+                fig_mc.add_trace(go.Bar(
+                    y=top10["Driver"], x=top10["SimPodiumProb"].apply(lambda v: v * 100),
+                    orientation="h", name="Podium",
+                    marker_color="rgba(0,242,255,0.45)",
+                    showlegend=True,
+                ))
+                fig_mc.add_trace(go.Bar(
+                    y=top10["Driver"], x=top10["SimWinProb"].apply(lambda v: v * 100),
+                    orientation="h", name="Win",
+                    marker_color="rgba(0,242,255,1.0)",
+                    showlegend=True,
+                ))
+                mc_layout = _plotly_layout(380)
+                mc_layout["barmode"] = "overlay"
+                mc_layout["xaxis"] = dict(
+                    title=dict(
+                        text="Probability %",
+                        font=dict(size=10, color="#555", family="JetBrains Mono"),
+                    ),
+                    gridcolor="#111",
+                    tickfont=dict(family="JetBrains Mono", size=9, color="#555"),
+                )
+                mc_layout["yaxis"] = dict(
+                    autorange="reversed",
+                    tickfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                    gridcolor="#111",
+                )
+                mc_layout["legend"] = dict(
+                    orientation="h", x=0.5, xanchor="center", y=1.08,
+                    font=dict(color="#888", family="JetBrains Mono", size=10),
+                    bgcolor="rgba(0,0,0,0)",
+                )
+                fig_mc.update_layout(**mc_layout)
+                st.plotly_chart(fig_mc, use_container_width=True)
+
+                # ── Expected Position + DNF Risk ──
+                mc1, mc2 = st.columns(2)
+                with mc1:
+                    st.markdown("### Expected Finish Position")
+                    fig_exp = go.Figure()
+                    colors_exp = [
+                        team_colour(row["TeamName"]) for _, row in top10.iterrows()
+                    ]
+                    fig_exp.add_trace(go.Bar(
+                        y=top10["Driver"],
+                        x=top10["SimExpectedPos"],
+                        orientation="h",
+                        marker_color=colors_exp,
+                        text=[f"P{v:.1f}" for v in top10["SimExpectedPos"]],
+                        textposition="outside",
+                        textfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                        showlegend=False,
+                    ))
+                    exp_layout = _plotly_layout(320)
+                    exp_layout["xaxis"] = dict(
+                        title=dict(
+                            text="Expected Position",
+                            font=dict(size=10, color="#555", family="JetBrains Mono"),
+                        ),
+                        gridcolor="#111", autorange="reversed",
+                        tickfont=dict(family="JetBrains Mono", size=9, color="#555"),
+                    )
+                    exp_layout["yaxis"] = dict(
+                        autorange="reversed",
+                        tickfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                        gridcolor="#111",
+                    )
+                    fig_exp.update_layout(**exp_layout)
+                    st.plotly_chart(fig_exp, use_container_width=True)
+
+                with mc2:
+                    st.markdown("### DNF Risk")
+                    fig_dnf = go.Figure()
+                    dnf_colors = [
+                        "rgba(255,45,85,0.85)" if row["SimDNFProb"] > 0.12
+                        else "rgba(255,165,0,0.6)" if row["SimDNFProb"] > 0.09
+                        else "rgba(100,100,100,0.4)"
+                        for _, row in top10.iterrows()
+                    ]
+                    fig_dnf.add_trace(go.Bar(
+                        y=top10["Driver"],
+                        x=top10["SimDNFProb"].apply(lambda v: v * 100),
+                        orientation="h",
+                        marker_color=dnf_colors,
+                        text=[f"{v*100:.1f}%" for v in top10["SimDNFProb"]],
+                        textposition="outside",
+                        textfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                        showlegend=False,
+                    ))
+                    dnf_layout = _plotly_layout(320)
+                    dnf_layout["xaxis"] = dict(
+                        title=dict(
+                            text="DNF Probability %",
+                            font=dict(size=10, color="#555", family="JetBrains Mono"),
+                        ),
+                        gridcolor="#111",
+                        tickfont=dict(family="JetBrains Mono", size=9, color="#555"),
+                    )
+                    dnf_layout["yaxis"] = dict(
+                        autorange="reversed",
+                        tickfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                        gridcolor="#111",
+                    )
+                    fig_dnf.update_layout(**dnf_layout)
+                    st.plotly_chart(fig_dnf, use_container_width=True)
+
+                # ── Position Distribution Heatmap ──
+                st.markdown("### Position Distribution Heatmap")
+                st.markdown(
+                    "<div class='tag'>Each cell shows the probability of a driver "
+                    "finishing in that position across all simulations</div><br>",
+                    unsafe_allow_html=True,
+                )
+                # Build matrix: rows = drivers (top 10), cols = P1..P20+DNF
+                positions = [str(i) for i in range(1, 21)] + ["DNF"]
+                heatmap_data = []
+                for _, row in top10.iterrows():
+                    dist = row["PositionDistribution"]
+                    heatmap_data.append(
+                        [dist.get(p, 0) * 100 for p in positions]
+                    )
+
+                fig_heat = go.Figure(data=go.Heatmap(
+                    z=heatmap_data,
+                    x=[f"P{p}" if p != "DNF" else "DNF" for p in positions],
+                    y=top10["Driver"].tolist(),
+                    colorscale="Inferno",
+                    showscale=True,
+                    colorbar=dict(
+                        title=dict(
+                            text="Prob %",
+                            font=dict(color="#888", size=10, family="JetBrains Mono"),
+                        ),
+                        tickfont=dict(color="#888", size=9, family="JetBrains Mono"),
+                    ),
+                    text=[
+                        [f"{v:.1f}" if v >= 1 else "" for v in row]
+                        for row in heatmap_data
+                    ],
+                    texttemplate="%{text}",
+                    textfont=dict(size=9, family="JetBrains Mono"),
+                    hovertemplate="%{y} → %{x}: %{z:.1f}%<extra></extra>",
+                ))
+                heat_layout = _plotly_layout(420)
+                heat_layout["xaxis"] = dict(
+                    side="top",
+                    tickfont=dict(family="JetBrains Mono", size=9, color="#888"),
+                )
+                heat_layout["yaxis"] = dict(
+                    autorange="reversed",
+                    tickfont=dict(family="JetBrains Mono", size=10, color="#888"),
+                )
+                heat_layout["margin"] = dict(l=10, r=10, t=40, b=10)
+                fig_heat.update_layout(**heat_layout)
+                st.plotly_chart(fig_heat, use_container_width=True)
+
+            _model_confidence_banner(year)
 
 
 # ── Page 2: Post-Race ─────────────────────────────────────────────────────────

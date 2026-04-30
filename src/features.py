@@ -48,15 +48,11 @@ LONG_RUN_THRESHOLD = 1.07
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _normalise_driver_col(df: pd.DataFrame) -> pd.DataFrame:
+def _normalise_result_cols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     if "Abbreviation" in df.columns and "Driver" not in df.columns:
         df = df.rename(columns={"Abbreviation": "Driver"})
-    return df
-
-
-def _normalise_team_col(df: pd.DataFrame) -> pd.DataFrame:
     if "TeamName" in df.columns:
-        df = df.copy()
         df["TeamName"] = df["TeamName"].map(normalise_team)
     return df
 
@@ -91,7 +87,7 @@ def load_all_results(session_type: str) -> pd.DataFrame:
             f"No results parquets for '{session_type}'. Run ingest.py first."
         )
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    df = _normalise_team_col(df)
+    df = _normalise_result_cols(df)
     log.info("Loaded %d %s result rows from %d files", len(df), session_type, len(files))
     return df
 
@@ -115,6 +111,7 @@ def load_all_weather(session_type: str) -> pd.DataFrame:
         )
         .reset_index()
     )
+    agg["Rainfall_any"] = agg["Rainfall_any"].astype(int)
     log.info("Summarised weather for %d sessions", len(agg))
     return agg
 
@@ -141,7 +138,7 @@ def _load_fp_laps(session_type: str) -> pd.DataFrame:
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    df = _normalise_driver_col(df)
+    df = _normalise_result_cols(df)
     df["LapTime_s"] = pd.to_timedelta(df["LapTime"]).dt.total_seconds()
     df = df.dropna(subset=["LapTime_s"])
     log.info("Loaded %d %s laps from %d files", len(df), session_type, len(files))
@@ -202,7 +199,7 @@ def extract_fp3_pace(fp3_laps: pd.DataFrame) -> pd.DataFrame:
     best = best.drop(columns=["FP3_Fastest_s"])
 
     log.info("Extracted FP3 pace: %d rows (%d sessions)",
-             len(best), best[["Year", "RoundNumber"]].drop_duplicates().__len__())
+             len(best), len(best[["Year", "RoundNumber"]].drop_duplicates()))
     return best
 
 
@@ -221,9 +218,10 @@ def extract_fp2_longruns(fp2_laps: pd.DataFrame) -> pd.DataFrame:
     that was missing from the race model.
 
     Features:
-      FP2_LongRunPace_s  — driver's avg long-run lap time
-      FP2_LongRunRank    — rank by long-run pace within session (1 = fastest)
-      FP2_LongRunDelta_s — delta to session best long-run pace
+      FP2_LongRunPace_s         — driver's avg long-run lap time
+      FP2_LongRunRank           — rank by long-run pace within session (1 = fastest)
+      FP2_LongRunDelta_s        — delta to session best long-run pace
+      FP2_Degradation_s_per_lap — slope of lap time vs tyre life (degradation rate)
 
     Returns empty DataFrame with correct schema if no FP2 data exists.
     """
@@ -232,6 +230,7 @@ def extract_fp2_longruns(fp2_laps: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=[
             "Year", "RoundNumber", "Driver",
             "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+            "FP2_Degradation_s_per_lap"
         ])
 
     laps = fp2_laps.copy()
@@ -257,6 +256,7 @@ def extract_fp2_longruns(fp2_laps: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=[
             "Year", "RoundNumber", "Driver",
             "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+            "FP2_Degradation_s_per_lap"
         ])
 
     pace = (
@@ -276,6 +276,34 @@ def extract_fp2_longruns(fp2_laps: pd.DataFrame) -> pd.DataFrame:
     pace = pace.merge(counts, on=["Year", "RoundNumber", "Driver"])
     pace = pace[pace["LongRunCount"] >= 3].drop(columns=["LongRunCount"])
 
+    # Tire degradation (slope of lap time vs tyre life)
+    def _calc_deg_slope(grp):
+        if len(grp) < 3: return np.nan
+        # Fallback to LapNumber if TyreLife is missing
+        x_col = "TyreLife" if "TyreLife" in grp.columns and not grp["TyreLife"].isna().all() else "LapNumber"
+        x = grp[x_col].values
+        y = grp["LapTime_s"].values
+        mask = ~np.isnan(x) & ~np.isnan(y)
+        if mask.sum() < 3: return np.nan
+        idx = np.argsort(x[mask])
+        slope, _ = np.polyfit(x[mask][idx], y[mask][idx], 1)
+        return slope
+
+    try:
+        deg = (
+            long_run_laps.groupby(["Year", "RoundNumber", "Driver"])
+            .apply(_calc_deg_slope, include_groups=False)
+            .reset_index(name="FP2_Degradation_s_per_lap")
+        )
+    except TypeError:
+        deg = (
+            long_run_laps.groupby(["Year", "RoundNumber", "Driver"])
+            .apply(_calc_deg_slope)
+            .reset_index(name="FP2_Degradation_s_per_lap")
+        )
+        
+    pace = pace.merge(deg, on=["Year", "RoundNumber", "Driver"], how="left")
+
     # Rank within session
     pace["FP2_LongRunRank"] = (
         pace.groupby(["Year", "RoundNumber"])["FP2_LongRunPace_s"]
@@ -293,7 +321,7 @@ def extract_fp2_longruns(fp2_laps: pd.DataFrame) -> pd.DataFrame:
     pace["FP2_LongRunDelta_s"] = pace["FP2_LongRunPace_s"] - pace["BestLR_s"]
     pace = pace.drop(columns=["BestLR_s"])
 
-    n_sessions = pace[["Year", "RoundNumber"]].drop_duplicates().__len__()
+    n_sessions = len(pace[["Year", "RoundNumber"]].drop_duplicates())
     log.info("Extracted FP2 long-run pace: %d rows (%d sessions)", len(pace), n_sessions)
     return pace
 
@@ -301,7 +329,7 @@ def extract_fp2_longruns(fp2_laps: pd.DataFrame) -> pd.DataFrame:
 # ── Quali best lap extraction ─────────────────────────────────────────────────
 
 def extract_quali_best(q_laps: pd.DataFrame) -> pd.DataFrame:
-    q_laps = _normalise_driver_col(q_laps.copy())
+    q_laps = _normalise_result_cols(q_laps.copy())
     q_laps["LapTime_s"] = pd.to_timedelta(q_laps["LapTime"]).dt.total_seconds()
     q_laps = q_laps.dropna(subset=["LapTime_s"])
 
@@ -360,7 +388,7 @@ def compute_driver_rolling_quali_form(best_quali: pd.DataFrame) -> pd.DataFrame:
 def compute_constructor_rolling_quali_form(
     best_quali: pd.DataFrame, q_results: pd.DataFrame
 ) -> pd.DataFrame:
-    q_res = _normalise_driver_col(q_results.copy())
+    q_res = _normalise_result_cols(q_results.copy())
     merged = best_quali.merge(
         q_res[["Year", "RoundNumber", "Driver", "TeamName"]].drop_duplicates(),
         on=["Year", "RoundNumber", "Driver"], how="left",
@@ -393,7 +421,7 @@ def compute_constructor_rolling_quali_form(
 def compute_teammate_h2h(
     best_quali: pd.DataFrame, q_results: pd.DataFrame
 ) -> pd.DataFrame:
-    q_res = _normalise_driver_col(q_results.copy())
+    q_res = _normalise_result_cols(q_results.copy())
     df = best_quali.merge(
         q_res[["Year", "RoundNumber", "Driver", "TeamName"]].drop_duplicates(),
         on=["Year", "RoundNumber", "Driver"], how="left",
@@ -438,7 +466,7 @@ def compute_teammate_h2h(
 def compute_driver_circuit_affinity(
     best_quali: pd.DataFrame, q_results: pd.DataFrame
 ) -> pd.DataFrame:
-    q_res = _normalise_driver_col(q_results.copy())
+    q_res = _normalise_result_cols(q_results.copy())
     df = best_quali.merge(
         q_res[["Year", "RoundNumber", "Driver", "CircuitShortName"]].drop_duplicates(),
         on=["Year", "RoundNumber", "Driver"], how="left",
@@ -503,7 +531,7 @@ def compute_driver_rolling_sector_form(sectors: pd.DataFrame) -> pd.DataFrame:
 # ── Rolling race form ─────────────────────────────────────────────────────────
 
 def compute_driver_rolling_form(race_results: pd.DataFrame) -> pd.DataFrame:
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     r["FinishPos"] = pd.to_numeric(r.get("Position",     np.nan), errors="coerce")
     r["GridPos"]   = pd.to_numeric(r.get("GridPosition", np.nan), errors="coerce")
     r["Points"]    = pd.to_numeric(r.get("Points", 0),            errors="coerce").fillna(0)
@@ -530,7 +558,7 @@ def compute_driver_rolling_form(race_results: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_constructor_rolling_form(race_results: pd.DataFrame) -> pd.DataFrame:
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     r["FinishPos"] = pd.to_numeric(r.get("Position", np.nan), errors="coerce")
     r["Points"]    = pd.to_numeric(r.get("Points", 0),        errors="coerce").fillna(0)
     r = r.sort_values(["TeamName", "Year", "RoundNumber"]).reset_index(drop=True)
@@ -560,7 +588,7 @@ def compute_constructor_rolling_form(race_results: pd.DataFrame) -> pd.DataFrame
 # ── Championship context ──────────────────────────────────────────────────────
 
 def compute_championship_context(race_results: pd.DataFrame) -> pd.DataFrame:
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     r["Points"] = pd.to_numeric(r.get("Points", 0), errors="coerce").fillna(0)
     r = r.sort_values(["Year", "RoundNumber", "Driver"])
     r["CumPointsBefore"] = (
@@ -606,7 +634,7 @@ def compute_grid_penalties(
     Positive -> dropped back (penalty), negative -> promoted, zero -> no change.
     Defaults to 0 when GridPosition column is absent.
     """
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
 
     if "GridPosition" not in r.columns:
         df = best_quali[["Year", "RoundNumber", "Driver"]].copy()
@@ -653,7 +681,7 @@ def compute_tyre_features(r_laps: pd.DataFrame) -> pd.DataFrame:
             "CircuitAvgStints", "CircuitDegRate",
         ])
 
-    laps = _normalise_driver_col(r_laps.copy())
+    laps = _normalise_result_cols(r_laps.copy())
     laps["LapTime_s"] = pd.to_timedelta(laps["LapTime"]).dt.total_seconds()
 
     # ── Starting compound & tyre life (lap 1) ────────────────────────────────
@@ -805,7 +833,7 @@ def compute_chaos_flag(race_results: pd.DataFrame) -> pd.DataFrame:
     grid position is less deterministic here.
     Defined by CHAOS_CIRCUITS in config.py (SC rate > 0.25 historically).
     """
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     df = r[["Year", "RoundNumber", "Driver", "CircuitShortName"]].drop_duplicates()
     df = df.copy()
     df["IsChaosCircuit"] = df["CircuitShortName"].apply(
@@ -828,7 +856,7 @@ def compute_career_race_count(race_results: pd.DataFrame) -> pd.DataFrame:
 
     Feature: CareerRaceCount (0-indexed: 0 = first race)
     """
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     r = r.sort_values(["Driver", "Year", "RoundNumber"]).reset_index(drop=True)
     r["CareerRaceCount"] = r.groupby("Driver").cumcount()  # 0 on first race
     log.info("Computed career race counts: %d rows", len(r))
@@ -850,7 +878,7 @@ def compute_constructor_championship_context(
     A team that is 200 points behind runs differently from one 10 behind —
     they take more risk, which affects pit strategy and race outcome.
     """
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     r["Points"] = pd.to_numeric(r.get("Points", 0), errors="coerce").fillna(0)
     r = r.sort_values(["Year", "RoundNumber", "TeamName"])
 
@@ -906,7 +934,7 @@ def compute_circuit_sc_rate(race_results: pd.DataFrame) -> pd.DataFrame:
              This is the historical average — same value for all drivers
              at a given circuit.
     """
-    r = _normalise_driver_col(race_results.copy())
+    r = _normalise_result_cols(race_results.copy())
     driver_circuit = r[["Year", "RoundNumber", "Driver", "CircuitShortName"]].drop_duplicates()
     driver_circuit = driver_circuit.copy()
     driver_circuit["CircuitSCRate"] = (
@@ -925,7 +953,7 @@ def compute_circuit_sc_rate(race_results: pd.DataFrame) -> pd.DataFrame:
 
 def build_quali_features() -> pd.DataFrame:
     q_laps    = load_all_sessions("Q")
-    q_results = _normalise_driver_col(load_all_results("Q"))
+    q_results = _normalise_result_cols(load_all_results("Q"))
     r_results = load_all_results("R")
     weather_q = load_all_weather("Q")
     sectors   = load_all_sectors()
@@ -949,6 +977,16 @@ def build_quali_features() -> pd.DataFrame:
     career_count     = compute_career_race_count(r_results)
     con_champ_ctx    = compute_constructor_championship_context(r_results)
     circuit_sc_rate  = compute_circuit_sc_rate(r_results)
+    
+    from elo import append_elo_features
+    elo_df = r_results.copy()
+    elo_df["FinishPos"] = pd.to_numeric(elo_df.get("Position", np.nan), errors="coerce")
+    elo_df["Status"] = elo_df.get("Status", pd.Series(["Finished"] * len(elo_df)))
+    elo_df["DNF"] = elo_df["Status"].apply(
+        lambda s: 0 if str(s).startswith("Finished") or str(s).startswith("+") else 1
+    )
+    elo_df = append_elo_features(elo_df)
+    elo_feats = elo_df[["Year", "RoundNumber", "Driver", "DriverElo", "TeamElo", "EloGap"]].drop_duplicates()
 
     df = best_quali.merge(
         q_results[[
@@ -1040,10 +1078,17 @@ def build_quali_features() -> pd.DataFrame:
     df = df.merge(career_count,    on=["Year", "RoundNumber", "Driver"], how="left")
     df = df.merge(con_champ_ctx,   on=["Year", "RoundNumber", "Driver"], how="left")
     df = df.merge(circuit_sc_rate, on=["Year", "RoundNumber", "Driver"], how="left")
+    df = pd.merge(df, elo_feats, on=["Year", "RoundNumber", "Driver"], how="left")
     df["CareerRaceCount"] = df["CareerRaceCount"].fillna(0).astype(int)
     df["ConChampDelta"]   = df["ConChampDelta"].fillna(df["ConChampDelta"].median())
     df["ConChampPos"]     = df["ConChampPos"].fillna(10).astype(int)
     df["CircuitSCRate"]   = df["CircuitSCRate"].fillna(DEFAULT_SC_RATE)
+    df["DriverElo"]       = df["DriverElo"].fillna(1500)
+    df["TeamElo"]         = df["TeamElo"].fillna(1500)
+    df["EloGap"]          = df["EloGap"].fillna(0)
+    
+    df["FP3_missing"] = df["FP3_BestLap_s"].isna().astype(float)
+    df["FP2_missing"] = df["FP2_LongRunPace_s"].isna().astype(float)
 
     circuit_flags = df["CircuitShortName"].apply(
         lambda c: pd.Series(circuit_type_flags(str(c)))
@@ -1059,7 +1104,7 @@ def build_race_features(quali_df: pd.DataFrame) -> pd.DataFrame:
     r_results = load_all_results("R")
     weather_r = load_all_weather("R")
 
-    r = _normalise_driver_col(r_results.copy())
+    r = _normalise_result_cols(r_results.copy())
     r["FinishPos"] = pd.to_numeric(r.get("Position", np.nan), errors="coerce")
     r["Podium"]    = (r["FinishPos"] <= 3).astype(int)
     r["DNF"] = r["Status"].apply(
@@ -1095,6 +1140,9 @@ def build_race_features(quali_df: pd.DataFrame) -> pd.DataFrame:
         "QualiphaseReached",
         "RollingS1Gap", "RollingS2Gap", "RollingS3Gap", "RollingSpeedTrap",
         "FP2_LongRunPace_s", "FP2_LongRunRank", "FP2_LongRunDelta_s",
+        "FP2_Degradation_s_per_lap",
+        "DriverElo", "TeamElo", "EloGap",
+        "FP3_missing", "FP2_missing",
     ]
     # Only include columns that exist
     quali_slim_cols = [c for c in quali_slim_cols if c in quali_df.columns]
